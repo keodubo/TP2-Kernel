@@ -8,6 +8,7 @@
 #include "idtLoader.h"
 #include "time.h"
 #include "interrupts.h"
+#include "memory_manager.h"
 
 
 
@@ -59,6 +60,12 @@ void * initializeKernelBinary()
 int main()
 {	
 	load_idt();
+
+	// Inicializar el memory manager
+	// El heap empieza despues del stack (32KB despues de endOfKernel)
+	void* heap_start = (void*)((uint64_t)&endOfKernel + PageSize * 8);
+	size_t heap_size = 1024 * 1024; // 1MB de heap
+	mm_init(heap_start, heap_size);
 
 	setCeroChar();
     ((EntryPoint)sampleCodeModuleAddress)();

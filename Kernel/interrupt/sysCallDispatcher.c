@@ -3,11 +3,12 @@
 #include <lib.h>
 #include <time.h>
 #include <sound.h>
+#include <memory_manager.h>
 
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
-#define SYS_CALLS_QTY 19
+#define SYS_CALLS_QTY 22
 
 extern uint8_t hasregisterInfo;
 extern const uint64_t registerInfo[17];
@@ -161,6 +162,26 @@ static uint64_t sys_stopSpeaker()
     return 1;
 }
 
+static uint64_t sys_malloc(size_t size)
+{
+    return (uint64_t)mm_malloc(size);
+}
+
+static uint64_t sys_free(void* ptr)
+{
+    mm_free(ptr);
+    return 0;
+}
+
+static uint64_t sys_mem_info(memory_info_t* info)
+{
+    if (info == NULL) {
+        return -1;
+    }
+    mm_get_info(info);
+    return 0;
+}
+
 uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t rax)
 {
     uint8_t r, g, b;
@@ -217,6 +238,12 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         color.g = g;
         color.b = b;
         return sys_writeColor(rdi, (char)rsi, color);
+    case 18:
+        return sys_malloc((size_t)rdi);
+    case 19:
+        return sys_free((void*)rdi);
+    case 20:
+        return sys_mem_info((memory_info_t*)rdi);
     default:
         return 0;
     }

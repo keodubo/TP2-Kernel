@@ -4,6 +4,15 @@
 #include <stdint.h>
 #include <colors.h>
 
+// Estructura para informacion de memoria (debe coincidir con la del kernel)
+typedef struct {
+    uint64_t total_memory;
+    uint64_t used_memory;
+    uint64_t free_memory;
+    uint64_t allocated_blocks;
+    uint64_t free_blocks;
+} memory_info_t;
+
 /*
  * Pasaje de parametros en C:
    %rdi %rsi %rdx %rcx %r8 %r9
@@ -44,5 +53,12 @@ uint64_t sys_getSeconds();
 uint64_t sys_scrHeight();
 
 uint64_t sys_drawCursor();
+
+// Memory management syscalls
+void* sys_malloc(uint64_t size);
+
+uint64_t sys_free(void* ptr);
+
+uint64_t sys_mem_info(memory_info_t* info);
 
 #endif

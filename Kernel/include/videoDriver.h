@@ -36,5 +36,6 @@ uint16_t vDriver_getWidth(void);
 uint16_t vDriver_getHeight(void);
 uint32_t vDriver_getFrameBuffer(void);
 uint8_t vDriver_getPixelWidth(void);
+uint16_t vDriver_getPitch(void);
 
 #endif

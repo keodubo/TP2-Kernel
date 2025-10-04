@@ -16,6 +16,9 @@ GLOBAL sys_pixelPlus
 GLOBAL sys_playSpeaker
 GLOBAL sys_writeColor
 GLOBAL sys_stopSpeaker
+GLOBAL sys_malloc
+GLOBAL sys_free
+GLOBAL sys_mem_info
 section .text
 
 ; Pasaje de parametros en C:
@@ -118,5 +121,20 @@ sys_drawCursor:
 
 sys_writeColor:
     mov rax, 0x11
+    int 80h
+    ret
+
+sys_malloc:
+    mov rax, 0x12
+    int 80h
+    ret
+
+sys_free:
+    mov rax, 0x13
+    int 80h
+    ret
+
+sys_mem_info:
+    mov rax, 0x14
     int 80h
     ret

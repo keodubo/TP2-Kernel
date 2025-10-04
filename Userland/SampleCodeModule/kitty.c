@@ -39,14 +39,15 @@ void printHelp()
 	printsColor("\n    >zerodiv            - testeo divide by zero exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >whoami             - prints current username", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >memtest            - test memory manager", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >memstatus          - show memory status", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >exit               - exit OS\n", MAX_BUFF, LIGHT_BLUE);
 
 	printc('\n');
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "setusername", "whoami", "exit", "ascii", "eliminator"};
-static void (*commands_ptr[MAX_ARGS])() = {cmd_undefined, cmd_help, cmd_help, cmd_time, cmd_clear, cmd_registersinfo, cmd_zeroDiv, cmd_invOpcode, cmd_setusername, cmd_whoami, cmd_exit, cmd_ascii, cmd_eliminator};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "setusername", "whoami", "exit", "ascii", "eliminator", "memtest", "memstatus"};
+static void (*commands_ptr[MAX_ARGS])() = {cmd_undefined, cmd_help, cmd_help, cmd_time, cmd_clear, cmd_registersinfo, cmd_zeroDiv, cmd_invOpcode, cmd_setusername, cmd_whoami, cmd_exit, cmd_ascii, cmd_eliminator, cmd_memtest, cmd_memstatus};
 
 void kitty()
 {
@@ -351,4 +352,14 @@ void welcome()
 	printsColor("\n    Welcome this efficient and simple operating system\n", MAX_BUFF, GREEN);
 	printsColor("    Here's a list of available commands\n", MAX_BUFF, GREEN);
 	printHelp();
+}
+
+void cmd_memtest() {
+	printc('\n');
+	test_memory_manager();
+}
+
+void cmd_memstatus() {
+	printc('\n');
+	mem_status();
 }

@@ -1,0 +1,32 @@
+# Archivos binarios generados
+*.bin
+*.o
+*.img
+*.qcow2
+*.vmdk
+*.sys
+
+# Directorios de objetos
+obj/
+Userland/SampleCodeModule/obj/
+
+# Archivos temporales del sistema
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*~
+
+# Archivos de respaldo
+*.bak
+
+# Logs
+*.log
+
+# Archivos específicos del proyecto
+Bootloader/BMFS/bmfs.bin
+Toolchain/ModulePacker/mp.bin
+Image/packedKernel.bin
+Image/x64BareBonesImage.*
+Userland/0000-sampleCodeModule.bin
+Userland/0001-sampleDataModule.bin
