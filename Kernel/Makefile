@@ -32,6 +32,7 @@
 include Makefile.inc
 
 KERNEL=kernel.bin
+KERNEL_ELF=kernel.elf
 SOURCES=$(wildcard *.c)
 SOURCES_INTERRUPT=$(wildcard interrupt/*.c)
 SOURCES_DRIVERS=$(wildcard drivers/*.c)
@@ -48,9 +49,13 @@ LOADEROBJECT=$(LOADERSRC:.asm=.o)
 STATICLIBS=
 ALL_OBJECTS= $(LOADEROBJECT) $(OBJECTS) $(OBJECTS_ASM) $(OBJECTS_INTERRUPT) $(OBJECTS_DRIVERS)
 
-all: $(KERNEL)
+all: $(KERNEL) $(KERNEL_ELF)
+
 $(KERNEL): $(STATICLIBS) $(ALL_OBJECTS)
 	$(LD) $(LDFLAGS) -T kernel.ld -o $@ $^
+
+$(KERNEL_ELF): $(STATICLIBS) $(ALL_OBJECTS)
+	$(LD) $(LDFLAGS) -T kernel.ld --oformat=elf64-x86-64 -o $@ $^
 
 %.o: %.c
 	$(GCC) $(GCCFLAGS) -I./include -I./interruptions -c $< -o $@
@@ -61,6 +66,6 @@ $(LOADEROBJECT):
 	$(ASM) $(ASMFLAGS) $(LOADERSRC) -o $(LOADEROBJECT)
 
 clean:
-	rm -rf $(ALL_OBJECTS) *.bin
+	rm -rf $(ALL_OBJECTS) *.bin *.elf
 
 .PHONY: all clean

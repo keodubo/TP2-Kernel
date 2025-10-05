@@ -1,5 +1,6 @@
 # Archivos binarios generados
 *.bin
+*.elf
 *.o
 *.img
 *.qcow2
@@ -29,4 +30,16 @@ Toolchain/ModulePacker/mp.bin
 Image/packedKernel.bin
 Image/x64BareBonesImage.*
 Userland/0000-sampleCodeModule.bin
+Userland/0000-sampleCodeModule.elf
 Userland/0001-sampleDataModule.bin
+
+# Archivos de debugging generados
+Kernel/kernel.elf
+Kernel/kernel.bin
+
+# Archivos de historial y debugging
+.bash_history
+.gdb_history
+
+# Scripts de desarrollo local (opcional - podrías querer commitear debug.sh)
+# debug.sh
