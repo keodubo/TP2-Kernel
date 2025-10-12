@@ -16,6 +16,8 @@ GLOBAL registerInfo
 GLOBAL hasregisterInfo
 
 EXTERN timer_handler
+EXTERN scheduler_handle_timer_tick
+EXTERN context_switch
 EXTERN keyboard_handler
 EXTERN syscall_dispatcher
 EXTERN exception_handler
@@ -181,11 +183,22 @@ interrupt_keyboardHandler:
 interrupt_timerHandler:
 	pushState
 
-	call timer_handler
+	mov rdi, rsp
+	call scheduler_handle_timer_tick
+	test rax, rax
+	jne .do_context_switch
 
 	endOfHardwareInterrupt
 	popState
 	iretq
+
+.do_context_switch:
+	endOfHardwareInterrupt
+	mov rsi, rax
+	xor rdi, rdi
+	call context_switch
+
+	hlt
 
 exception_zeroDiv:
 	saveRegistersException

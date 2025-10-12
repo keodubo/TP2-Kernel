@@ -9,6 +9,7 @@
 #include "time.h"
 #include "interrupts.h"
 #include "memory_manager.h"
+#include "process.h"
 
 
 
@@ -27,6 +28,8 @@ static void * const sampleCodeModuleAddress = (void*)0x400000;
 static void * const sampleDataModuleAddress = (void*)0x500000;
 
 typedef int (*EntryPoint)();
+
+static void userland_bootstrap(int argc, char** argv);
 
 
 void clearBSS(void * bssAddress, uint64_t bssSize)
@@ -67,10 +70,24 @@ int main()
 	size_t heap_size = 1024 * 1024; // 1MB de heap
 	mm_init(heap_start, heap_size);
 
+	process_init();
+
 	setCeroChar();
-    ((EntryPoint)sampleCodeModuleAddress)();
+
+	process_create(userland_bootstrap, 0, NULL, "shell", DEFAULT_PRIORITY, 1);
+
+	process_start();
 
     while(1) _hlt();
     return 0;
+}
+
+static void userland_bootstrap(int argc, char** argv) {
+	(void)argc;
+	(void)argv;
+
+	((EntryPoint)sampleCodeModuleAddress)();
+
+	process_exit_current();
 }
 
