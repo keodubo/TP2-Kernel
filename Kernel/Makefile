@@ -49,6 +49,15 @@ LOADEROBJECT=$(LOADERSRC:.asm=.o)
 STATICLIBS=
 ALL_OBJECTS= $(LOADEROBJECT) $(OBJECTS) $(OBJECTS_ASM) $(OBJECTS_INTERRUPT) $(OBJECTS_DRIVERS)
 
+# Seleccion del memory manager
+# Por defecto usa First Fit, se puede sobrescribir con MM_FLAG
+MM_FLAG ?=
+
+# Agregar el flag al compilador si esta definido
+ifneq ($(MM_FLAG),)
+	GCCFLAGS += $(MM_FLAG)
+endif
+
 all: $(KERNEL) $(KERNEL_ELF)
 
 $(KERNEL): $(STATICLIBS) $(ALL_OBJECTS)
@@ -68,4 +77,9 @@ $(LOADEROBJECT):
 clean:
 	rm -rf $(ALL_OBJECTS) *.bin *.elf
 
-.PHONY: all clean
+# Target para compilar con Buddy System
+buddy:
+	@echo "Compilando con Buddy System..."
+	$(MAKE) MM_FLAG=-DUSE_BUDDY_SYSTEM all
+
+.PHONY: all clean buddy

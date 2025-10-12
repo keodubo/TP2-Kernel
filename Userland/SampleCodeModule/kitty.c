@@ -350,6 +350,13 @@ void welcome()
 	playMelody(windowsXPmelody, (sizeof(windowsXPmelody) / sizeof(NoteType)));
 
 	printsColor("\n    Welcome this efficient and simple operating system\n", MAX_BUFF, GREEN);
+	
+#ifdef USE_BUDDY_SYSTEM
+	printsColor("    Memory Manager: BUDDY SYSTEM\n", MAX_BUFF, YELLOW);
+#else
+	printsColor("    Memory Manager: FIRST FIT\n", MAX_BUFF, YELLOW);
+#endif
+
 	printsColor("    Here's a list of available commands\n", MAX_BUFF, GREEN);
 	printHelp();
 }
