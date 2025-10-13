@@ -2,6 +2,7 @@
 #define ASCII_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 const char *ascii_JesusIsKing[] = {
         "                           |       |",

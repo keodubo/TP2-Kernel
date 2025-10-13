@@ -61,4 +61,21 @@ uint64_t sys_free(void* ptr);
 
 uint64_t sys_mem_info(memory_info_t* info);
 
+// Process management syscalls
+int64_t sys_getpid();
+
+int64_t sys_create_process(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority);
+
+int64_t sys_kill(int pid);
+
+int64_t sys_block(int pid);
+
+int64_t sys_unblock(int pid);
+
+int64_t sys_nice(int pid, uint8_t new_priority);
+
+int64_t sys_yield();
+
+int64_t sys_wait_pid(int pid);
+
 #endif

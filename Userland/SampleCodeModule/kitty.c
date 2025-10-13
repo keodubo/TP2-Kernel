@@ -6,6 +6,29 @@
 #include <eliminator.h>
 #include <kitty.h>
 #include <ascii.h>
+#include "../tests/test_util.h"
+#include "../tests/syscall.h"
+
+// Declaraciones de las funciones de test
+uint64_t test_mm(uint64_t argc, char *argv[]);
+uint64_t test_processes(uint64_t argc, char *argv[]);
+uint64_t test_sync(uint64_t argc, char *argv[]);
+
+// Wrappers para ejecutar tests como procesos
+void test_mm_wrapper(int argc, char **argv) {
+    char *args[] = {"1024"};
+    test_mm(1, args);
+}
+
+void test_processes_wrapper(int argc, char **argv) {
+    char *args[] = {"5"};
+    test_processes(1, args);
+}
+
+void test_sync_wrapper(int argc, char **argv) {
+    char *args[] = {"1000", "1"};
+    test_sync(2, args);
+}
 
 // initialize all to 0
 char line[MAX_BUFF + 1] = {0};
@@ -21,7 +44,7 @@ static int commandIdxMax = 0;
 
 char usernameLength = 4;
 
-// Forward declarations
+// Declaraciones adelantadas
 int isUpperArrow(char c);
 int isDownArrow(char c);
 
@@ -36,13 +59,16 @@ void printHelp()
 	printsColor("\n    >zerodiv            - testeo divide by zero exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >test_mm            - test memory manager", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >test_processes     - test process management", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >test_sync          - test synchronization", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >exit               - exit OS\n", MAX_BUFF, LIGHT_BLUE);
 
 	printc('\n');
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator"};
-static void (*commands_ptr[MAX_ARGS])() = {cmd_undefined, cmd_help, cmd_help, cmd_time, cmd_clear, cmd_registersinfo, cmd_zeroDiv, cmd_invOpcode, cmd_exit, cmd_ascii, cmd_eliminator};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync"};
+static void (*commands_ptr[MAX_ARGS])() = {cmd_undefined, cmd_help, cmd_help, cmd_time, cmd_clear, cmd_registersinfo, cmd_zeroDiv, cmd_invOpcode, cmd_exit, cmd_ascii, cmd_eliminator, cmd_test_mm, cmd_test_processes, cmd_test_sync};
 
 void kitty()
 {
@@ -244,6 +270,78 @@ void cmd_eliminator()
 	else
 	{
 		prints("\nERROR: Invalid number of players. Only 1 or 2 players allowed.", MAX_BUFF);
+	}
+}
+
+void cmd_test_mm()
+{
+	prints("\n========================================\n", MAX_BUFF);
+	prints("TEST MEMORY MANAGER\n", MAX_BUFF);
+	prints("========================================\n", MAX_BUFF);
+	prints("Ejecutando test con 1024 KB de memoria\n", MAX_BUFF);
+	prints("Este test corre en loop infinito\n", MAX_BUFF);
+	prints("Solo imprime si detecta un ERROR\n", MAX_BUFF);
+	prints("Se ejecuta como proceso en background\n", MAX_BUFF);
+	prints("========================================\n\n", MAX_BUFF);
+	
+	char *args[] = {NULL};
+	int pid = sys_create_process(test_mm_wrapper, 0, args, "test_mm", 1);
+	
+	if (pid > 0) {
+		prints("Test iniciado con PID: ", MAX_BUFF);
+		printDec(pid);
+		prints("\n", MAX_BUFF);
+		prints("Si no ves errores, esta funcionando correctamente!\n", MAX_BUFF);
+	} else {
+		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
+	}
+}
+
+void cmd_test_processes()
+{
+	prints("\n========================================\n", MAX_BUFF);
+	prints("TEST PROCESS MANAGEMENT\n", MAX_BUFF);
+	prints("========================================\n", MAX_BUFF);
+	prints("Ejecutando test con 5 procesos\n", MAX_BUFF);
+	prints("Este test corre en loop infinito\n", MAX_BUFF);
+	prints("Crea, mata, bloquea y desbloquea procesos\n", MAX_BUFF);
+	prints("Se ejecuta como proceso en background\n", MAX_BUFF);
+	prints("========================================\n\n", MAX_BUFF);
+	
+	char *args[] = {NULL};
+	int pid = sys_create_process(test_processes_wrapper, 0, args, "test_processes", 1);
+	
+	if (pid > 0) {
+		prints("Test iniciado con PID: ", MAX_BUFF);
+		printDec(pid);
+		prints("\n", MAX_BUFF);
+		prints("Si no ves errores, esta funcionando correctamente!\n", MAX_BUFF);
+	} else {
+		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
+	}
+}
+
+void cmd_test_sync()
+{
+	prints("\n========================================\n", MAX_BUFF);
+	prints("TEST SYNCHRONIZATION\n", MAX_BUFF);
+	prints("========================================\n", MAX_BUFF);
+	prints("Ejecutando test con 1000 iteraciones\n", MAX_BUFF);
+	prints("Usando semaforos para sincronizacion\n", MAX_BUFF);
+	prints("Este test SI deberia terminar\n", MAX_BUFF);
+	prints("Al finalizar imprime: Final value: 0\n", MAX_BUFF);
+	prints("Se ejecuta como proceso en background\n", MAX_BUFF);
+	prints("========================================\n\n", MAX_BUFF);
+	
+	char *args[] = {NULL};
+	int pid = sys_create_process(test_sync_wrapper, 0, args, "test_sync", 1);
+	
+	if (pid > 0) {
+		prints("Test iniciado con PID: ", MAX_BUFF);
+		printDec(pid);
+		prints("\n", MAX_BUFF);
+	} else {
+		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
 	}
 }
 

@@ -4,11 +4,13 @@
 #include <time.h>
 #include <sound.h>
 #include <memory_manager.h>
+#include <process.h>
+#include <scheduler.h>
 
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
-#define SYS_CALLS_QTY 22
+#define SYS_CALLS_QTY 30
 
 extern uint8_t hasregisterInfo;
 extern const uint64_t registerInfo[17];
@@ -77,7 +79,7 @@ static void sys_drawRectangle(int x, int y, int x2, int y2, Color color)
     vDriver_drawRectangle(x, y, x2, y2, color);
 }
 
-static void sys_wait(int ms)
+static void sys_sleep(int ms)
 {
     if (ms > 0)
     {
@@ -182,6 +184,64 @@ static uint64_t sys_mem_info(memory_info_t* info)
     return 0;
 }
 
+// Syscalls de procesos
+static uint64_t sys_getpid()
+{
+    process_t* current = scheduler_get_current();
+    if (current == NULL) {
+        return -1;
+    }
+    return current->pid;
+}
+
+static uint64_t sys_create_process(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority)
+{
+    return process_create(entry_point, argc, argv, name, priority, 0);
+}
+
+static uint64_t sys_kill(int pid)
+{
+    return process_kill(pid);
+}
+
+static uint64_t sys_block(int pid)
+{
+    return process_block(pid);
+}
+
+static uint64_t sys_unblock(int pid)
+{
+    return process_unblock(pid);
+}
+
+static uint64_t sys_nice(int pid, uint8_t new_priority)
+{
+    return process_set_priority(pid, new_priority);
+}
+
+static uint64_t sys_yield()
+{
+    process_yield();
+    return 0;
+}
+
+static uint64_t sys_wait(int pid)
+{
+    // Implementacion de wait para un PID especifico
+    // Por ahora, implementacion simple
+    process_t* target = process_get_by_pid(pid);
+    if (target == NULL) {
+        return -1;
+    }
+    
+    // Bloquear proceso actual hasta que el proceso objetivo termine
+    while (target->state != TERMINATED) {
+        process_yield();
+    }
+    
+    return 0;
+}
+
 uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t rax)
 {
     uint8_t r, g, b;
@@ -214,7 +274,7 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         sys_drawRectangle(rdi, rsi, rdx, r10, color);
         return 1;
     case 9:
-        sys_wait(rdi);
+        sys_sleep(rdi);
         return 1;
     case 10:
         return sys_registerInfo((uint64_t *)rdi);
@@ -244,6 +304,22 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         return sys_free((void*)rdi);
     case 20:
         return sys_mem_info((memory_info_t*)rdi);
+    case 21:
+        return sys_getpid();
+    case 22:
+        return sys_create_process((void (*)(int, char**))rdi, (int)rsi, (char**)rdx, (const char*)r10, (uint8_t)r8);
+    case 23:
+        return sys_kill((int)rdi);
+    case 24:
+        return sys_block((int)rdi);
+    case 25:
+        return sys_unblock((int)rdi);
+    case 26:
+        return sys_nice((int)rdi, (uint8_t)rsi);
+    case 27:
+        return sys_yield();
+    case 28:
+        return sys_wait((int)rdi);
     default:
         return 0;
     }
