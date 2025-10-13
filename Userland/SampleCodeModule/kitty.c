@@ -15,32 +15,23 @@ uint64_t test_processes(uint64_t argc, char *argv[]);
 uint64_t test_sync(uint64_t argc, char *argv[]);
 
 // Wrappers para ejecutar tests como procesos
-void test_mm_wrapper(int argc, char **argv) {
-    // Si no se pasa argumento, usar valor por defecto grande
+void test_mm_process(int argc, char **argv) {
     char *default_args[] = {"100000000"};
-    if (argc > 0 && argv != NULL) {
-        test_mm(argc, argv);
-    } else {
-        test_mm(1, default_args);
-    }
+    test_mm(1, default_args);
+    // Cuando termina, el proceso debe terminar
+    while(1);
 }
 
-void test_processes_wrapper(int argc, char **argv) {
+void test_processes_process(int argc, char **argv) {
     char *default_args[] = {"10"};
-    if (argc > 0 && argv != NULL) {
-        test_processes(argc, argv);
-    } else {
-        test_processes(1, default_args);
-    }
+    test_processes(1, default_args);
+    while(1);
 }
 
-void test_sync_wrapper(int argc, char **argv) {
+void test_sync_process(int argc, char **argv) {
     char *default_args[] = {"10", "1"};
-    if (argc > 0 && argv != NULL) {
-        test_sync(argc, argv);
-    } else {
-        test_sync(2, default_args);
-    }
+    test_sync(2, default_args);
+    while(1);
 }
 
 // initialize all to 0
@@ -288,32 +279,20 @@ void cmd_eliminator()
 
 void cmd_test_mm()
 {
-	char *args[] = {NULL};
-	int pid = sys_create_process(test_mm_wrapper, 0, args, "test_mm", 1);
-	
-	if (pid <= 0) {
-		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
-	}
+	char *args[] = {"100000000"};
+	test_mm(1, args);
 }
 
 void cmd_test_processes()
 {
-	char *args[] = {NULL};
-	int pid = sys_create_process(test_processes_wrapper, 0, args, "test_processes", 1);
-	
-	if (pid <= 0) {
-		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
-	}
+	char *args[] = {"10"};
+	test_processes(1, args);
 }
 
 void cmd_test_sync()
 {
-	char *args[] = {NULL};
-	int pid = sys_create_process(test_sync_wrapper, 0, args, "test_sync", 1);
-	
-	if (pid <= 0) {
-		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
-	}
+	char *args[] = {"10", "1"};
+	test_sync(2, args);
 }
 
 void historyCaller(int direction)

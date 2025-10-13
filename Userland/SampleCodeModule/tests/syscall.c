@@ -6,13 +6,12 @@ int64_t my_getpid() {
 }
 
 int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
-  // For now, we use endless_loop as default function
-  // In a real implementation, you'd have a function registry
-  extern void endless_loop();
-  extern void endless_loop_print(uint64_t wait);
+  // Declarar las funciones wrapper
+  extern void endless_loop_wrapper(int, char**);
+  extern void endless_loop_print_wrapper(int, char**);
   extern uint64_t my_process_inc(uint64_t argc, char *argv[]);
   
-  void (*func)(int, char**) = (void (*)(int, char**))endless_loop;
+  void (*func)(int, char**) = endless_loop_wrapper;
   
   // Simple function name matching
   if (name != 0) {
@@ -27,14 +26,14 @@ int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
       if (el[i] != name[i]) break;
     }
     if (el[i] == '\0' && name[i] == '\0') {
-      func = (void (*)(int, char**))endless_loop;
+      func = endless_loop_wrapper;
     } else {
       // Check endless_loop_print
       for (i = 0; elp[i] != '\0' && name[i] != '\0'; i++) {
         if (elp[i] != name[i]) break;
       }
       if (elp[i] == '\0' && name[i] == '\0') {
-        func = (void (*)(int, char**))endless_loop_print;
+        func = endless_loop_print_wrapper;
       } else {
         // Check my_process_inc
         for (i = 0; mpi[i] != '\0' && name[i] != '\0'; i++) {
