@@ -16,7 +16,7 @@ void kitty();
 
 void printHelp();
 void newLine();
-void printLine(char c, int username);
+void printLine(char c);
 int checkLine();
 void cmd_undefined();
 void cmd_help();
@@ -28,13 +28,9 @@ void cmd_invOpcode();
 void cmd_exit();
 void cmd_charsizeplus();
 void cmd_charsizeminus();
-void cmd_setusername();
 void cmd_ascii();
 void printPrompt();
-void cmd_whoami();
 void cmd_eliminator();
-void cmd_memtest();
-void cmd_memstatus();
 void historyCaller(int direction);
 void handleSpecialCommands(char c);
 

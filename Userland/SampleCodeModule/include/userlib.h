@@ -97,7 +97,5 @@ void registerInfo();
 // Memory management functions
 void* malloc(uint64_t size);
 void free(void* ptr);
-void mem_status();
-void test_memory_manager();
 
 #endif /* _USERLIB_H_ */

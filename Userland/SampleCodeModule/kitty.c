@@ -22,15 +22,12 @@ static int commandIdxMax = 0;
 char usernameLength = 4;
 
 // Forward declarations
-void newLineUsername();
 int isUpperArrow(char c);
 int isDownArrow(char c);
 
 void printHelp()
 {
 	printsColor("\n\n    >'help' or 'ls'     - displays this shell information", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >setusername        - set username", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >whoami             - display current username", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >time               - display current time", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >clear              - clear the display", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >(+)                - increase font size (scaled)", MAX_BUFF, LIGHT_BLUE);
@@ -39,15 +36,13 @@ void printHelp()
 	printsColor("\n    >zerodiv            - testeo divide by zero exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >memtest            - test memory manager", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >memstatus          - show memory status", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >exit               - exit OS\n", MAX_BUFF, LIGHT_BLUE);
 
 	printc('\n');
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "setusername", "whoami", "exit", "ascii", "eliminator", "memtest", "memstatus"};
-static void (*commands_ptr[MAX_ARGS])() = {cmd_undefined, cmd_help, cmd_help, cmd_time, cmd_clear, cmd_registersinfo, cmd_zeroDiv, cmd_invOpcode, cmd_setusername, cmd_whoami, cmd_exit, cmd_ascii, cmd_eliminator, cmd_memtest, cmd_memstatus};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator"};
+static void (*commands_ptr[MAX_ARGS])() = {cmd_undefined, cmd_help, cmd_help, cmd_time, cmd_clear, cmd_registersinfo, cmd_zeroDiv, cmd_invOpcode, cmd_exit, cmd_ascii, cmd_eliminator};
 
 void kitty()
 {
@@ -58,11 +53,11 @@ void kitty()
 	{
 		drawCursor();
 		c = getChar();
-		printLine(c, strcmp(username, "user"));
+		printLine(c);
 	}
 }
 
-void printLine(char c, int username)
+void printLine(char c)
 {
 	if (linePos >= MAX_BUFF || c == lastc)
 	{
@@ -77,13 +72,9 @@ void printLine(char c, int username)
 		printc(c);
 		line[--linePos] = 0;
 	}
-	else if (c == NEW_LINE && username)
+	else if (c == NEW_LINE)
 	{
 		newLine();
-	}
-	else if (c == NEW_LINE && !username)
-	{
-		newLineUsername();
 	}
 	lastc = c;
 }
@@ -144,29 +135,6 @@ int checkLine()
 	}
 
 	return 0;
-}
-
-void cmd_setusername()
-{
-	int input_length = strlen(parameter);
-	if (input_length < 3 || input_length > USERNAME_SIZE)
-	{
-		prints("\nERROR: Username length must be between 3 and 16 characters long! Username not set.", MAX_BUFF);
-		return;
-	}
-	usernameLength = input_length;
-	for (int i = 0; i < input_length; i++)
-	{
-		username[i] = parameter[i];
-	}
-	prints("\nUsername set to ", MAX_BUFF);
-	prints(username, usernameLength);
-}
-
-void cmd_whoami()
-{
-	prints("\n", MAX_BUFF);
-	prints(username, usernameLength);
 }
 
 void cmd_help()
@@ -306,49 +274,8 @@ void cmd_ascii()
 	}
 }
 
-void newLineUsername()
-{
-	strcpy(username, line);
-	usernameLength = strlen(username);
-
-	for (int i = 0; line[i] != '\0'; i++)
-	{
-		line[i] = 0;
-		command[i] = 0;
-		parameter[i] = 0;
-	}
-	linePos = 0;
-
-	prints("\n", MAX_BUFF);
-	clear_scr();
-}
-
 void welcome()
 {
-	char c;
-	prints("\nPlease enter your username: ", MAX_BUFF);
-	while (!strcmp(username, "user"))
-	{
-		drawCursor();
-		c = getChar();
-		printLine(c, strcmp(username, "user"));
-	}
-
-	
-
-	NoteType windowsXPmelody[] = {
-		{622, 300}, // D#5
-		{0, 25},
-		{466, 300}, // A#4
-		{0, 50},
-		{415, 450}, // G#4
-		{0, 25},
-		{622, 250}, // D#5
-		{466, 900}	// A#4
-	};
-
-	playMelody(windowsXPmelody, (sizeof(windowsXPmelody) / sizeof(NoteType)));
-
 	printsColor("\n    Welcome this efficient and simple operating system\n", MAX_BUFF, GREEN);
 	
 #ifdef USE_BUDDY_SYSTEM
@@ -359,14 +286,4 @@ void welcome()
 
 	printsColor("    Here's a list of available commands\n", MAX_BUFF, GREEN);
 	printHelp();
-}
-
-void cmd_memtest() {
-	printc('\n');
-	test_memory_manager();
-}
-
-void cmd_memstatus() {
-	printc('\n');
-	mem_status();
 }
