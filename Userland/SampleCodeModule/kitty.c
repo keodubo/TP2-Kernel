@@ -16,18 +16,31 @@ uint64_t test_sync(uint64_t argc, char *argv[]);
 
 // Wrappers para ejecutar tests como procesos
 void test_mm_wrapper(int argc, char **argv) {
-    char *args[] = {"1024"};
-    test_mm(1, args);
+    // Si no se pasa argumento, usar valor por defecto grande
+    char *default_args[] = {"100000000"};
+    if (argc > 0 && argv != NULL) {
+        test_mm(argc, argv);
+    } else {
+        test_mm(1, default_args);
+    }
 }
 
 void test_processes_wrapper(int argc, char **argv) {
-    char *args[] = {"5"};
-    test_processes(1, args);
+    char *default_args[] = {"10"};
+    if (argc > 0 && argv != NULL) {
+        test_processes(argc, argv);
+    } else {
+        test_processes(1, default_args);
+    }
 }
 
 void test_sync_wrapper(int argc, char **argv) {
-    char *args[] = {"1000", "1"};
-    test_sync(2, args);
+    char *default_args[] = {"10", "1"};
+    if (argc > 0 && argv != NULL) {
+        test_sync(argc, argv);
+    } else {
+        test_sync(2, default_args);
+    }
 }
 
 // initialize all to 0
@@ -275,72 +288,30 @@ void cmd_eliminator()
 
 void cmd_test_mm()
 {
-	prints("\n========================================\n", MAX_BUFF);
-	prints("TEST MEMORY MANAGER\n", MAX_BUFF);
-	prints("========================================\n", MAX_BUFF);
-	prints("Ejecutando test con 1024 KB de memoria\n", MAX_BUFF);
-	prints("Este test corre en loop infinito\n", MAX_BUFF);
-	prints("Solo imprime si detecta un ERROR\n", MAX_BUFF);
-	prints("Se ejecuta como proceso en background\n", MAX_BUFF);
-	prints("========================================\n\n", MAX_BUFF);
-	
 	char *args[] = {NULL};
 	int pid = sys_create_process(test_mm_wrapper, 0, args, "test_mm", 1);
 	
-	if (pid > 0) {
-		prints("Test iniciado con PID: ", MAX_BUFF);
-		printDec(pid);
-		prints("\n", MAX_BUFF);
-		prints("Si no ves errores, esta funcionando correctamente!\n", MAX_BUFF);
-	} else {
+	if (pid <= 0) {
 		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
 	}
 }
 
 void cmd_test_processes()
 {
-	prints("\n========================================\n", MAX_BUFF);
-	prints("TEST PROCESS MANAGEMENT\n", MAX_BUFF);
-	prints("========================================\n", MAX_BUFF);
-	prints("Ejecutando test con 5 procesos\n", MAX_BUFF);
-	prints("Este test corre en loop infinito\n", MAX_BUFF);
-	prints("Crea, mata, bloquea y desbloquea procesos\n", MAX_BUFF);
-	prints("Se ejecuta como proceso en background\n", MAX_BUFF);
-	prints("========================================\n\n", MAX_BUFF);
-	
 	char *args[] = {NULL};
 	int pid = sys_create_process(test_processes_wrapper, 0, args, "test_processes", 1);
 	
-	if (pid > 0) {
-		prints("Test iniciado con PID: ", MAX_BUFF);
-		printDec(pid);
-		prints("\n", MAX_BUFF);
-		prints("Si no ves errores, esta funcionando correctamente!\n", MAX_BUFF);
-	} else {
+	if (pid <= 0) {
 		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
 	}
 }
 
 void cmd_test_sync()
 {
-	prints("\n========================================\n", MAX_BUFF);
-	prints("TEST SYNCHRONIZATION\n", MAX_BUFF);
-	prints("========================================\n", MAX_BUFF);
-	prints("Ejecutando test con 1000 iteraciones\n", MAX_BUFF);
-	prints("Usando semaforos para sincronizacion\n", MAX_BUFF);
-	prints("Este test SI deberia terminar\n", MAX_BUFF);
-	prints("Al finalizar imprime: Final value: 0\n", MAX_BUFF);
-	prints("Se ejecuta como proceso en background\n", MAX_BUFF);
-	prints("========================================\n\n", MAX_BUFF);
-	
 	char *args[] = {NULL};
 	int pid = sys_create_process(test_sync_wrapper, 0, args, "test_sync", 1);
 	
-	if (pid > 0) {
-		prints("Test iniciado con PID: ", MAX_BUFF);
-		printDec(pid);
-		prints("\n", MAX_BUFF);
-	} else {
+	if (pid <= 0) {
 		prints("ERROR: No se pudo crear el proceso del test\n", MAX_BUFF);
 	}
 }

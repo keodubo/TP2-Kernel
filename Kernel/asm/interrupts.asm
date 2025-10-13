@@ -4,6 +4,7 @@ GLOBAL picMasterMask
 GLOBAL picSlaveMask
 GLOBAL haltcpu
 GLOBAL _hlt
+GLOBAL _force_schedule
 
 GLOBAL interrupt_keyboardHandler
 GLOBAL interrupt_timerHandler
@@ -105,6 +106,10 @@ _cli:
 
 _sti:
 	sti
+	ret
+
+_force_schedule:
+	int 0x20
 	ret
 
 picMasterMask:

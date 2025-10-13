@@ -71,6 +71,7 @@ void process_init();
 int process_create(void (*entry_point)(int, char**), int argc, char** argv,
                    const char* name, uint8_t priority, int foreground);
 process_t* process_get_current();
+process_t* process_get_idle();
 process_t* process_get_by_pid(int pid);
 int process_kill(int pid);
 int process_set_priority(int pid, uint8_t new_priority);

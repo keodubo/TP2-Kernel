@@ -13,6 +13,7 @@ static process_t* ready_tails[MAX_PRIORITY + 1] = {0};
 static void enqueue_ready(process_t* proc);
 static void dequeue_specific(process_t* proc);
 static process_t* dequeue_next_ready(void);
+extern process_t* process_get_idle();
 
 void scheduler_init() {
     current_process = NULL;
@@ -79,6 +80,11 @@ void scheduler_remove_process(process_t* proc) {
 
 process_t* scheduler_pick_next() {
     process_t* next = dequeue_next_ready();
+    if (next == NULL) {
+        // No hay procesos listos, usar idle
+        next = process_get_idle();
+    }
+    
     if (next != NULL) {
         next->state = RUNNING;
         current_process = next;
@@ -96,6 +102,11 @@ process_t* scheduler_tick() {
 
     if (current_process == NULL) {
         return scheduler_pick_next();
+    }
+
+    // Si el proceso actual esta terminado, no disminuir quantum, solo cambiar
+    if (current_process->state == TERMINATED) {
+        return scheduler_yield();
     }
 
     if (current_quantum > 0) {
@@ -116,19 +127,26 @@ process_t* scheduler_yield() {
 
     process_t* old_process = current_process;
 
+    // Si el proceso actual esta corriendo, ponerlo en ready
     if (old_process != NULL && old_process->state == RUNNING) {
         old_process->state = READY;
         enqueue_ready(old_process);
     }
+    // Si esta bloqueado o terminado, no lo re-encolar
 
     process_t* next_process = dequeue_next_ready();
     if (next_process == NULL) {
-        if (old_process != NULL) {
+        // No hay procesos listos
+        // Si el viejo proceso todavia puede correr, volver a el
+        if (old_process != NULL && old_process->state == READY) {
             old_process->state = RUNNING;
             current_process = old_process;
             current_quantum = QUANTUM_TICKS;
+            return current_process;
         }
-        return current_process;
+        // Si no, devolver NULL para que se maneje externamente
+        current_process = NULL;
+        return NULL;
     }
 
     next_process->state = RUNNING;

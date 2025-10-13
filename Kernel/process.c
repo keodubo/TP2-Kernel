@@ -22,6 +22,7 @@ static void process_notify_parent_exit(process_t* proc);
 static int process_has_active_children(int parent_pid);
 
 extern void _hlt();
+extern void _force_schedule();
 extern void context_switch(process_context_t* old_context, process_context_t* new_context);
 
 void process_init() {
@@ -119,6 +120,10 @@ process_t* process_get_current() {
     return scheduler_get_current();
 }
 
+process_t* process_get_idle() {
+    return idle_process;
+}
+
 process_t* process_get_by_pid(int pid) {
     process_t* cursor = process_list_head;
     while (cursor != NULL) {
@@ -189,24 +194,25 @@ int process_block(int pid) {
         return -1;
     }
 
+    if (proc->state == TERMINATED || proc->state == BLOCKED) {
+        return -1;
+    }
+
+    // Si esta en la cola de ready, removerlo
     if (proc->state == READY) {
         scheduler_remove_process(proc);
     }
 
-    if (proc->state == RUNNING || proc->state == READY) {
-        process_t* current = scheduler_get_current();
-        proc->state = BLOCKED;
+    proc->state = BLOCKED;
 
-        if (proc == current) {
-            process_t* next = scheduler_yield();
-            if (next != NULL && next != current) {
-                context_switch(&current->context, &next->context);
-            }
-        }
-        return 0;
+    // Si bloqueamos el proceso actual, forzar un yield
+    process_t* current = scheduler_get_current();
+    if (proc == current) {
+        // El proximo timer tick va a hacer el context switch
+        process_yield();
     }
 
-    return -1;
+    return 0;
 }
 
 int process_unblock(int pid) {
@@ -226,12 +232,8 @@ int process_unblock(int pid) {
 
 void process_yield() {
     process_collect_zombies();
-    process_t* current = scheduler_get_current();
-    process_t* next = scheduler_yield();
-
-    if (next != NULL && next != current) {
-        context_switch(current ? &current->context : NULL, &next->context);
-    }
+    // Forzar una interrupcion de timer para que el scheduler se ejecute
+    _force_schedule();
 }
 
 int process_count() {
@@ -288,23 +290,16 @@ void process_exit_current() {
         return;
     }
 
-    scheduler_remove_process(current);
     current->state = TERMINATED;
     process_remove_from_list(current);
     active_processes--;
     process_notify_parent_exit(current);
     process_queue_terminated(current);
 
-    process_t* next = scheduler_yield();
+    // Forzar scheduler para cambiar al siguiente proceso
+    _force_schedule();
 
-    if (next == NULL || next == current) {
-        while (1) {
-            _hlt();
-        }
-    }
-
-    context_switch(NULL, &next->context);
-
+    // No deberia llegar aca
     while (1) {
         _hlt();
     }
@@ -369,10 +364,14 @@ static void copy_process_name(char* dest, const char* src, size_t max_len) {
 
 static void process_entry_trampoline(process_t* proc) {
     if (proc != NULL && proc->entry_point != NULL) {
-        proc->state = RUNNING;
         proc->entry_point(proc->argc, proc->argv);
     }
+    // Cuando el proceso termina, marcarlo como TERMINATED y hacer yield
     process_exit_current();
+    // No deberia llegar aca pero por seguridad
+    while(1) {
+        _hlt();
+    }
 }
 
 static void idle_process_entry(int argc, char** argv) {
