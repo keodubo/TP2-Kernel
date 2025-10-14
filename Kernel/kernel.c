@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <string.h>
 #include "lib.h"
 #include <moduleLoader.h>
 #include <naiveConsole.h>
@@ -9,7 +8,7 @@
 #include "time.h"
 #include "interrupts.h"
 #include "memory_manager.h"
-#include "process.h"
+#include "sched.h"
 
 
 
@@ -70,13 +69,13 @@ int main()
 	size_t heap_size = 1024 * 1024; // 1MB de heap
 	mm_init(heap_start, heap_size);
 
-	process_init();
+	sched_init();
 
 	setCeroChar();
 
-	process_create(userland_bootstrap, 0, NULL, "shell", DEFAULT_PRIORITY, 1);
+	proc_create(userland_bootstrap, 0, NULL, DEFAULT_PRIO, true, "shell");
 
-	process_start();
+	sched_start();
 
     while(1) _hlt();
     return 0;
@@ -88,6 +87,5 @@ static void userland_bootstrap(int argc, char** argv) {
 
 	((EntryPoint)sampleCodeModuleAddress)();
 
-	process_exit_current();
+	proc_exit(0);
 }
-

@@ -34,6 +34,11 @@ void cmd_eliminator();
 void cmd_test_mm();
 void cmd_test_processes();
 void cmd_test_sync();
+void cmd_ps();
+void cmd_loop();
+void cmd_nice();
+void cmd_kill();
+void cmd_yield();
 void historyCaller(int direction);
 void handleSpecialCommands(char c);
 

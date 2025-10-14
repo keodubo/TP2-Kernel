@@ -300,6 +300,7 @@ int gameOverScreen(int loser)
 
 void updatePlayerPosition(PlayerType *players, int gameStatus[HEIGHT][WIDTH])
 {
+    (void)gameStatus;
     for (int i = 0; i < PLAYERCOUNT; i++)
     {
         switch (players[i].facingDirection)

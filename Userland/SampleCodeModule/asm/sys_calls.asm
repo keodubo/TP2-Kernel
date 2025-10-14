@@ -27,6 +27,8 @@ GLOBAL sys_unblock
 GLOBAL sys_nice
 GLOBAL sys_yield
 GLOBAL sys_wait_pid
+GLOBAL sys_exit
+GLOBAL sys_proc_snapshot
 section .text
 
 ; Pasaje de parametros en C:
@@ -185,5 +187,15 @@ sys_yield:
 
 sys_wait_pid:
     mov rax, 0x1C
+    int 80h
+    ret
+
+sys_exit:
+    mov rax, 0x1D
+    int 80h
+    ret
+
+sys_proc_snapshot:
+    mov rax, 0x1E
     int 80h
     ret

@@ -54,9 +54,7 @@ void ncPrintBase(uint64_t value, uint32_t base)
 
 void ncClear()
 {
-	int i;
-
-	for (i = 0; i < height * width; i++)
+	for (uint32_t i = 0; i < height * width; i++)
 		video[i * 2] = ' ';
 	currentVideo = video;
 }

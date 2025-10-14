@@ -7,7 +7,7 @@ GLOBAL _hlt
 GLOBAL _force_schedule
 
 GLOBAL interrupt_keyboardHandler
-GLOBAL interrupt_timerHandler
+GLOBAL irq_timer_handler
 GLOBAL exception_zeroDiv
 GLOBAL exception_invalidOp
 GLOBAL interrupt_systemCall
@@ -17,8 +17,7 @@ GLOBAL registerInfo
 GLOBAL hasregisterInfo
 
 EXTERN timer_handler
-EXTERN scheduler_handle_timer_tick
-EXTERN context_switch
+EXTERN schedule
 EXTERN keyboard_handler
 EXTERN syscall_dispatcher
 EXTERN exception_handler
@@ -185,25 +184,28 @@ interrupt_keyboardHandler:
     popState
     iretq
 
-interrupt_timerHandler:
+; Timer interrupt handler - implements preemptive scheduling
+irq_timer_handler:
 	pushState
 
-	mov rdi, rsp
-	call scheduler_handle_timer_tick
-	test rax, rax
-	jne .do_context_switch
+	; Call timer_handler to increment ticks
+	call timer_handler
 
+	; Call schedule(cur_rsp) where cur_rsp = rsp
+	mov rdi, rsp
+	call schedule
+
+	; rax now contains new rsp (or 0 if no switch)
+	test rax, rax
+	jz .no_switch
+
+	; Context switch: load new stack pointer
+	mov rsp, rax
+
+.no_switch:
 	endOfHardwareInterrupt
 	popState
 	iretq
-
-.do_context_switch:
-	endOfHardwareInterrupt
-	mov rsi, rax
-	xor rdi, rdi
-	call context_switch
-
-	hlt
 
 exception_zeroDiv:
 	saveRegistersException

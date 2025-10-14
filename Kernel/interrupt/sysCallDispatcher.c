@@ -4,13 +4,13 @@
 #include <time.h>
 #include <sound.h>
 #include <memory_manager.h>
-#include <process.h>
-#include <scheduler.h>
+#include <sched.h>
+#include <syscalls.h>
 
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
-#define SYS_CALLS_QTY 30
+#define SYS_CALLS_QTY 32
 
 extern uint8_t hasregisterInfo;
 extern const uint64_t registerInfo[17];
@@ -184,62 +184,29 @@ static uint64_t sys_mem_info(memory_info_t* info)
     return 0;
 }
 
-// Syscalls de procesos
-static uint64_t sys_getpid()
-{
-    process_t* current = scheduler_get_current();
-    if (current == NULL) {
-        return -1;
-    }
-    return current->pid;
-}
-
 static uint64_t sys_create_process(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority)
 {
-    return process_create(entry_point, argc, argv, name, priority, 0);
+    return proc_create(entry_point, argc, argv, priority, false, name);
 }
 
 static uint64_t sys_kill(int pid)
 {
-    return process_kill(pid);
-}
-
-static uint64_t sys_block(int pid)
-{
-    return process_block(pid);
-}
-
-static uint64_t sys_unblock(int pid)
-{
-    return process_unblock(pid);
-}
-
-static uint64_t sys_nice(int pid, uint8_t new_priority)
-{
-    return process_set_priority(pid, new_priority);
-}
-
-static uint64_t sys_yield()
-{
-    process_yield();
-    return 0;
+    return proc_kill(pid);
 }
 
 static uint64_t sys_wait(int pid)
 {
-    // Implementacion de wait para un PID especifico
-    // Por ahora, implementacion simple
-    process_t* target = process_get_by_pid(pid);
-    if (target == NULL) {
-        return -1;
+    if (pid <= 0) {
+        return (uint64_t)-1;
     }
-    
-    // Bloquear proceso actual hasta que el proceso objetivo termine
-    while (target->state != TERMINATED) {
-        process_yield();
+
+    while (1) {
+        pcb_t *target = proc_by_pid(pid);
+        if (target == NULL || target->state == EXITED) {
+            return 0;
+        }
+        sys_yield();
     }
-    
-    return 0;
 }
 
 uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t rax)
@@ -320,6 +287,10 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         return sys_yield();
     case 28:
         return sys_wait((int)rdi);
+    case 29:
+        return sys_exit((int)rdi);
+    case 30:
+        return sys_proc_snapshot((proc_info_t*)rdi, rsi);
     default:
         return 0;
     }

@@ -28,7 +28,7 @@ void load_idt()
 
   // Load IDT
   setup_IDT_entry(0x21, (uint64_t)&interrupt_keyboardHandler);
-  setup_IDT_entry(0x20, (uint64_t)&interrupt_timerHandler);
+  setup_IDT_entry(0x20, (uint64_t)&irq_timer_handler);
 
   // Syscall
   setup_IDT_entry(0x80, (uint64_t)&interrupt_systemCall);

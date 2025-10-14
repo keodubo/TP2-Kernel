@@ -192,6 +192,8 @@ void vDriver_clear() {
 }
 
 static void drawChar(int x, int y, unsigned char c, Color fntColor, Color bgColor) {
+    (void)x;
+    (void)y;
     //con estos indices recorro el caracter
     int cx, cy;
     //mascara de bits para saber que color imprimo a pantalla, si pertenece a caracter o a fondo

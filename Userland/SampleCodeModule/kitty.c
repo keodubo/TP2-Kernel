@@ -16,6 +16,8 @@ uint64_t test_sync(uint64_t argc, char *argv[]);
 
 // Wrappers para ejecutar tests como procesos
 void test_mm_process(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
     char *default_args[] = {"100000000"};
     test_mm(1, default_args);
     // Cuando termina, el proceso debe terminar
@@ -23,12 +25,16 @@ void test_mm_process(int argc, char **argv) {
 }
 
 void test_processes_process(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
     char *default_args[] = {"10"};
     test_processes(1, default_args);
     while(1);
 }
 
 void test_sync_process(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
     char *default_args[] = {"10", "1"};
     test_sync(2, default_args);
     while(1);
@@ -45,12 +51,17 @@ static char username[USERNAME_SIZE] = "user";
 static char commandHistory[MAX_COMMAND][MAX_BUFF] = {0};
 static int commandIterator = 0;
 static int commandIdxMax = 0;
+static int loop_counter = 0;
 
 char usernameLength = 4;
 
 // Declaraciones adelantadas
 int isUpperArrow(char c);
 int isDownArrow(char c);
+static const char *state_to_string(int state);
+static int next_token(const char *src, int *index, char *out, int max_len);
+static int parse_int_token(const char *token, int *value);
+static void loop_process(int argc, char **argv);
 
 void printHelp()
 {
@@ -62,6 +73,11 @@ void printHelp()
 	printsColor("\n    >registersinfo      - print current register values", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >zerodiv            - testeo divide by zero exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >ps                - list active processes", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >loop [-p prio]    - spawn a CPU-bound process", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >nice <pid> <prio>  - change priority of a process", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >kill <pid>        - terminate a process", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    >yield             - yield the CPU", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >test_mm            - test memory manager", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    >test_processes     - test process management", MAX_BUFF, LIGHT_BLUE);
@@ -71,8 +87,28 @@ void printHelp()
 	printc('\n');
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync"};
-static void (*commands_ptr[MAX_ARGS])() = {cmd_undefined, cmd_help, cmd_help, cmd_time, cmd_clear, cmd_registersinfo, cmd_zeroDiv, cmd_invOpcode, cmd_exit, cmd_ascii, cmd_eliminator, cmd_test_mm, cmd_test_processes, cmd_test_sync};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "ps", "loop", "nice", "kill", "yield"};
+static void (*commands_ptr[MAX_ARGS])() = {
+	cmd_undefined,
+	cmd_help,
+	cmd_help,
+	cmd_time,
+	cmd_clear,
+	cmd_registersinfo,
+	cmd_zeroDiv,
+	cmd_invOpcode,
+	cmd_exit,
+	cmd_ascii,
+	cmd_eliminator,
+	cmd_test_mm,
+	cmd_test_processes,
+	cmd_test_sync,
+	cmd_ps,
+	cmd_loop,
+	cmd_nice,
+	cmd_kill,
+	cmd_yield
+};
 
 void kitty()
 {
@@ -156,7 +192,8 @@ int checkLine()
 	strcpyForParam(commandHistory[commandIdxMax++], command, parameter);
 	commandIterator = commandIdxMax;
 
-	for (i = 1; i < MAX_ARGS; i++)
+	int command_count = sizeof(commands) / sizeof(commands[0]);
+	for (i = 1; i < command_count; i++)
 	{
 		if (strcmp(command, commands[i]) == 0)
 		{
@@ -295,6 +332,213 @@ void cmd_test_sync()
 	test_sync(2, args);
 }
 
+static const char *state_to_string(int state) {
+	switch (state) {
+	case 0:
+		return "NEW";
+	case 1:
+		return "READY";
+	case 2:
+		return "RUN";
+	case 3:
+		return "BLOCK";
+	case 4:
+		return "EXIT";
+	default:
+		return "?";
+	}
+}
+
+static int next_token(const char *src, int *index, char *out, int max_len) {
+	int i = *index;
+	while (src[i] == ' ') {
+		i++;
+	}
+	if (src[i] == '\0') {
+		return 0;
+	}
+	int j = 0;
+	while (src[i] != '\0' && src[i] != ' ' && j < max_len - 1) {
+		out[j++] = src[i++];
+	}
+	out[j] = '\0';
+	while (src[i] == ' ') {
+		i++;
+	}
+	*index = i;
+	return 1;
+}
+
+static int parse_int_token(const char *token, int *value) {
+	if (token == NULL || token[0] == '\0') {
+		return 0;
+	}
+	uint64_t parsed = charToInt((char *)token);
+	if (parsed == (uint64_t)-1) {
+		return 0;
+	}
+	*value = (int)parsed;
+	return 1;
+}
+
+static void loop_process(int argc, char **argv) {
+	(void)argc;
+	(void)argv;
+	int pid = (int)sys_getpid();
+	while (1) {
+		printf("[loop %d] .\n", pid);
+		sys_wait(200);
+	}
+}
+
+void cmd_ps()
+{
+	proc_info_t info[MAX_PROCS];
+	int count = sys_proc_snapshot(info, MAX_PROCS);
+	if (count <= 0)
+	{
+		prints("\nNo processes to show", MAX_BUFF);
+		return;
+	}
+
+	printsColor("\nPID   PRIO STATE  TICKS FG NAME", MAX_BUFF, GREEN);
+	prints("\n", MAX_BUFF);
+	for (int i = 0; i < count; i++)
+	{
+		const char *state = state_to_string(info[i].state);
+		const char *fg = info[i].fg ? "FG" : "BG";
+		printf("PID %d PRIO %d STATE %s TICKS %d %s %s\n",
+		       info[i].pid,
+		       info[i].priority,
+		       state,
+		       info[i].ticks_left,
+		       fg,
+		       info[i].name);
+	}
+}
+
+void cmd_loop()
+{
+	int prio = DEFAULT_PRIORITY;
+	int idx = 0;
+	char token[MAX_BUFF];
+
+	if (parameter[0] != '\0')
+	{
+		if (!next_token(parameter, &idx, token, sizeof(token)))
+		{
+			printsColor("\nInvalid priority", MAX_BUFF, RED);
+			return;
+		}
+
+		if (strcmp(token, "-p") == 0)
+		{
+			if (!next_token(parameter, &idx, token, sizeof(token)))
+			{
+				printsColor("\nUsage: loop [-p <prio>]", MAX_BUFF, RED);
+				return;
+			}
+		}
+
+		if (!parse_int_token(token, &prio))
+		{
+			printsColor("\nPriority must be a number", MAX_BUFF, RED);
+			return;
+		}
+	}
+
+	if (prio < MIN_PRIORITY || prio > MAX_PRIORITY)
+	{
+		printsColor("\nPriority out of range (0-3)", MAX_BUFF, RED);
+		return;
+	}
+
+	char name[32];
+	sprintf(name, "loop-%d", loop_counter++);
+	int pid = sys_create_process(loop_process, 0, NULL, name, (uint8_t)prio);
+	if (pid < 0)
+	{
+		printsColor("\nFailed to spawn loop", MAX_BUFF, RED);
+		return;
+	}
+	printf("\nSpawned %s (pid %d, prio %d)\n", name, pid, prio);
+}
+
+void cmd_nice()
+{
+	int idx = 0;
+	char token[MAX_BUFF];
+	int pid;
+	int prio;
+
+	if (!next_token(parameter, &idx, token, sizeof(token)))
+	{
+		printsColor("\nUsage: nice <pid> <prio>", MAX_BUFF, RED);
+		return;
+	}
+
+	if (!parse_int_token(token, &pid))
+	{
+		printsColor("\nInvalid pid", MAX_BUFF, RED);
+		return;
+	}
+
+	if (!next_token(parameter, &idx, token, sizeof(token)))
+	{
+		printsColor("\nUsage: nice <pid> <prio>", MAX_BUFF, RED);
+		return;
+	}
+
+	if (!parse_int_token(token, &prio))
+	{
+		printsColor("\nInvalid priority", MAX_BUFF, RED);
+		return;
+	}
+
+	if (prio < MIN_PRIORITY || prio > MAX_PRIORITY)
+	{
+		printsColor("\nPriority out of range (0-3)", MAX_BUFF, RED);
+		return;
+	}
+
+	sys_nice(pid, (uint8_t)prio);
+	printf("\nSet pid %d priority to %d\n", pid, prio);
+}
+
+void cmd_kill()
+{
+	int idx = 0;
+	char token[MAX_BUFF];
+	int pid;
+
+	if (!next_token(parameter, &idx, token, sizeof(token)))
+	{
+		printsColor("\nUsage: kill <pid>", MAX_BUFF, RED);
+		return;
+	}
+
+	if (!parse_int_token(token, &pid))
+	{
+		printsColor("\nInvalid pid", MAX_BUFF, RED);
+		return;
+	}
+
+	if (sys_kill(pid) < 0)
+	{
+		printsColor("\nKill failed", MAX_BUFF, RED);
+	}
+	else
+	{
+		printf("\nKilled pid %d\n", pid);
+	}
+}
+
+void cmd_yield()
+{
+	sys_yield();
+	prints("\nYield requested", MAX_BUFF);
+}
+
 void historyCaller(int direction)
 {
 	cmd_clear();
@@ -315,7 +559,7 @@ void cmd_ascii()
 		splash_length++;
 	}
 
-	for (int i = 0; i < splash_length; i++)
+    for (size_t i = 0; i < splash_length; i++)
 	{
 		printsColor(ascii[asciiIdx][i], MAX_BUFF, WHITE);
 		printc('\n');

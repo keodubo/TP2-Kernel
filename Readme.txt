@@ -27,5 +27,25 @@ From the x64BareBones project directory run:
   user@linux:$ ./run.sh
 
 
+Testing preemptive multitasking
+-------------------------------
+Inside the shell you can exercise the scheduler and syscalls with the following commands:
+
+- `ps` — list every process with pid, priority, state, remaining ticks and whether it runs in foreground.
+  Example output:
+    PID 1 PRIO 0 STATE RUN TICKS 5 FG BG idle
+- `loop -p 3` — spawn a CPU-bound test process at priority 3. Spawn another with `loop -p 1` to contrast priorities.
+- `nice <pid> <prio>` — change the priority of a running loop. For example `nice 5 1` lowers pid 5 to priority 1.
+- `yield` — make the current shell process yield immediately (`ps` shows the state flip back to READY).
+- `kill <pid>` — terminate a process created with `loop`. `ps` will no longer list the killed pid.
+
+Suggested manual test flow:
+1. Run `loop -p 3` and `loop -p 1`; observe the higher-priority loop printing more often.
+2. Use `ps` to verify both loops are READY/RUNNING with different priorities.
+3. Issue `nice <low_pid> 3` and re-run `ps` to confirm the priority change.
+4. Use `yield` from the shell to force an immediate context switch to a loop.
+5. Finish by `kill <pid>` for each loop and confirm the scheduler falls back to the idle task.
+
+
 Author: Rodrigo Rearden (RowDaBoat)
 Collaborator: Augusto Nizzo McIntosh

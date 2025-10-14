@@ -13,6 +13,15 @@ typedef struct {
     uint64_t free_blocks;
 } memory_info_t;
 
+typedef struct {
+    int pid;
+    int priority;
+    int state;
+    int ticks_left;
+    int fg;
+    char name[32];
+} proc_info_t;
+
 /*
  * Pasaje de parametros en C:
    %rdi %rsi %rdx %rcx %r8 %r9
@@ -77,5 +86,14 @@ int64_t sys_nice(int pid, uint8_t new_priority);
 int64_t sys_yield();
 
 int64_t sys_wait_pid(int pid);
+
+int64_t sys_exit(int code);
+
+int64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count);
+
+#define MIN_PRIORITY 0
+#define MAX_PRIORITY 3
+#define DEFAULT_PRIORITY 2
+#define MAX_PROCS 128
 
 #endif

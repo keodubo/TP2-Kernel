@@ -1,15 +1,20 @@
 #include <stdint.h>
 #include "../include/sys_calls.h"
 
+extern void endless_loop_wrapper(int, char**);
+extern void endless_loop_print_wrapper(int, char**);
+extern uint64_t my_process_inc(uint64_t argc, char *argv[]);
+
+static void my_process_inc_entry(int argc, char **argv) {
+  (void)my_process_inc((uint64_t)argc, argv);
+}
+
 int64_t my_getpid() {
   return (int64_t)sys_getpid();
 }
 
 int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
   // Declarar las funciones wrapper
-  extern void endless_loop_wrapper(int, char**);
-  extern void endless_loop_print_wrapper(int, char**);
-  extern uint64_t my_process_inc(uint64_t argc, char *argv[]);
   
   void (*func)(int, char**) = endless_loop_wrapper;
   
@@ -40,7 +45,7 @@ int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
           if (mpi[i] != name[i]) break;
         }
         if (mpi[i] == '\0' && name[i] == '\0') {
-          func = (void (*)(int, char**))my_process_inc;
+          func = my_process_inc_entry;
         }
       }
     }
@@ -66,21 +71,26 @@ int64_t my_unblock(uint64_t pid) {
 }
 
 int64_t my_sem_open(char *sem_id, uint64_t initialValue) {
+  (void)sem_id;
+  (void)initialValue;
   // Semaphores not implemented yet
-  return 0;
+  return 1;
 }
 
 int64_t my_sem_wait(char *sem_id) {
+  (void)sem_id;
   // Semaphores not implemented yet
   return 0;
 }
 
 int64_t my_sem_post(char *sem_id) {
+  (void)sem_id;
   // Semaphores not implemented yet
   return 0;
 }
 
 int64_t my_sem_close(char *sem_id) {
+  (void)sem_id;
   // Semaphores not implemented yet
   return 0;
 }
