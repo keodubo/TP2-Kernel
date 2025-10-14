@@ -16,28 +16,80 @@ uint64_t test_sync(uint64_t argc, char *argv[]);
 
 // Wrappers para ejecutar tests como procesos
 void test_mm_process(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    char *default_args[] = {"100000000"};
-    test_mm(1, default_args);
-    // Cuando termina, el proceso debe terminar
-    while(1);
+    char arg_buffer[32] = "100000000";
+    if (argc > 0 && argv != NULL && argv[0] != NULL) {
+        int i;
+        for (i = 0; argv[0][i] != '\0' && i < (int)sizeof(arg_buffer) - 1; i++) {
+            arg_buffer[i] = argv[0][i];
+        }
+        arg_buffer[i] = '\0';
+    }
+
+    if (argv != NULL) {
+        if (argc > 0 && argv[0] != NULL) {
+            sys_free(argv[0]);
+        }
+        sys_free(argv);
+    }
+
+    char *args[2] = {arg_buffer, NULL};
+    uint64_t result = test_mm(1, args);
+    sys_exit((int)result);
 }
 
 void test_processes_process(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    char *default_args[] = {"10"};
-    test_processes(1, default_args);
-    while(1);
+    char arg_buffer[32] = "10";
+    if (argc > 0 && argv != NULL && argv[0] != NULL) {
+        int i;
+        for (i = 0; argv[0][i] != '\0' && i < (int)sizeof(arg_buffer) - 1; i++) {
+            arg_buffer[i] = argv[0][i];
+        }
+        arg_buffer[i] = '\0';
+    }
+
+    if (argv != NULL) {
+        if (argc > 0 && argv[0] != NULL) {
+            sys_free(argv[0]);
+        }
+        sys_free(argv);
+    }
+
+    char *args[2] = {arg_buffer, NULL};
+    test_processes(1, args);
+    sys_exit(0);
 }
 
 void test_sync_process(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    char *default_args[] = {"10", "1"};
-    test_sync(2, default_args);
-    while(1);
+    char arg0_buffer[32] = "10";
+    char arg1_buffer[32] = "1";
+
+    if (argc >= 1 && argv != NULL && argv[0] != NULL) {
+        int i;
+        for (i = 0; argv[0][i] != '\0' && i < (int)sizeof(arg0_buffer) - 1; i++) {
+            arg0_buffer[i] = argv[0][i];
+        }
+        arg0_buffer[i] = '\0';
+    }
+    if (argc >= 2 && argv != NULL && argv[1] != NULL) {
+        int i;
+        for (i = 0; argv[1][i] != '\0' && i < (int)sizeof(arg1_buffer) - 1; i++) {
+            arg1_buffer[i] = argv[1][i];
+        }
+        arg1_buffer[i] = '\0';
+    }
+
+    if (argv != NULL) {
+        for (int i = 0; i < argc; i++) {
+            if (argv[i] != NULL) {
+                sys_free(argv[i]);
+            }
+        }
+        sys_free(argv);
+    }
+
+    char *args[3] = {arg0_buffer, arg1_buffer, NULL};
+    test_sync(2, args);
+    sys_exit(0);
 }
 
 // initialize all to 0
@@ -316,20 +368,145 @@ void cmd_eliminator()
 
 void cmd_test_mm()
 {
-	char *args[] = {"100000000"};
-	test_mm(1, args);
+    char token[32];
+    int idx = 0;
+    int argc_spawn = 0;
+    char **argv_spawn = NULL;
+
+    if (next_token(parameter, &idx, token, sizeof(token))) {
+        size_t len = strlen(token) + 1;
+        char *arg0 = (char*)sys_malloc(len);
+        if (arg0 == NULL) {
+            printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+            return;
+        }
+        strcpy(arg0, token);
+
+        argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
+        if (argv_spawn == NULL) {
+            sys_free(arg0);
+            printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+            return;
+        }
+        argv_spawn[0] = arg0;
+        argv_spawn[1] = NULL;
+        argc_spawn = 1;
+    }
+
+    int64_t pid = sys_create_process(test_mm_process, argc_spawn, argv_spawn, "test_mm", DEFAULT_PRIORITY);
+    if (pid < 0) {
+        printsColor("\nFailed to launch test_mm", MAX_BUFF, RED);
+        if (argv_spawn != NULL) {
+            sys_free(argv_spawn[0]);
+            sys_free(argv_spawn);
+        }
+    } else {
+        printf("\nSpawned test_mm (pid %d)\n", (int)pid);
+    }
 }
 
 void cmd_test_processes()
 {
-	char *args[] = {"10"};
-	test_processes(1, args);
+    char token[32];
+    int idx = 0;
+    int argc_spawn = 0;
+    char **argv_spawn = NULL;
+
+    if (next_token(parameter, &idx, token, sizeof(token))) {
+        size_t len = strlen(token) + 1;
+        char *arg0 = (char*)sys_malloc(len);
+        if (arg0 == NULL) {
+            printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+            return;
+        }
+        strcpy(arg0, token);
+
+        argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
+        if (argv_spawn == NULL) {
+            sys_free(arg0);
+            printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+            return;
+        }
+        argv_spawn[0] = arg0;
+        argv_spawn[1] = NULL;
+        argc_spawn = 1;
+    }
+
+    int64_t pid = sys_create_process(test_processes_process, argc_spawn, argv_spawn, "test_processes", DEFAULT_PRIORITY);
+    if (pid < 0) {
+        printsColor("\nFailed to launch test_processes", MAX_BUFF, RED);
+        if (argv_spawn != NULL) {
+            sys_free(argv_spawn[0]);
+            sys_free(argv_spawn);
+        }
+    } else {
+        printf("\nSpawned test_processes (pid %d)\n", (int)pid);
+    }
 }
 
 void cmd_test_sync()
 {
-	char *args[] = {"10", "1"};
-	test_sync(2, args);
+    char token0[32];
+    char token1[32];
+    int idx = 0;
+    int argc_spawn = 0;
+    char **argv_spawn = NULL;
+
+    int first = next_token(parameter, &idx, token0, sizeof(token0)) ? 1 : 0;
+    int second = next_token(parameter, &idx, token1, sizeof(token1)) ? 1 : 0;
+
+    if (first || second) {
+        size_t count = 0;
+        if (first) count++;
+        if (second) count++;
+
+        argv_spawn = (char**)sys_malloc(sizeof(char*) * (count + 1));
+        if (argv_spawn == NULL) {
+            printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+            return;
+        }
+
+        size_t index = 0;
+        if (first) {
+            size_t len = strlen(token0) + 1;
+            char *arg0 = (char*)sys_malloc(len);
+            if (arg0 == NULL) {
+                sys_free(argv_spawn);
+                printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+                return;
+            }
+            strcpy(arg0, token0);
+            argv_spawn[index++] = arg0;
+        }
+        if (second) {
+            size_t len = strlen(token1) + 1;
+            char *arg1 = (char*)sys_malloc(len);
+            if (arg1 == NULL) {
+                if (first) {
+                    sys_free(argv_spawn[0]);
+                }
+                sys_free(argv_spawn);
+                printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+                return;
+            }
+            argv_spawn[index++] = arg1;
+        }
+        argv_spawn[index] = NULL;
+        argc_spawn = (int)count;
+    }
+
+    int64_t pid = sys_create_process(test_sync_process, argc_spawn, argv_spawn, "test_sync", DEFAULT_PRIORITY);
+    if (pid < 0) {
+        printsColor("\nFailed to launch test_sync", MAX_BUFF, RED);
+        if (argv_spawn != NULL) {
+            for (int i = 0; i < argc_spawn; i++) {
+                sys_free(argv_spawn[i]);
+            }
+            sys_free(argv_spawn);
+        }
+    } else {
+        printf("\nSpawned test_sync (pid %d)\n", (int)pid);
+    }
 }
 
 static const char *state_to_string(int state) {

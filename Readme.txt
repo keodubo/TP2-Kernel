@@ -38,6 +38,9 @@ Inside the shell you can exercise the scheduler and syscalls with the following 
 - `nice <pid> <prio>` — change the priority of a running loop. For example `nice 5 1` lowers pid 5 to priority 1.
 - `yield` — make the current shell process yield immediately (`ps` shows the state flip back to READY).
 - `kill <pid>` — terminate a process created with `loop`. `ps` will no longer list the killed pid.
+- `test_processes <n>` — launches the stress test that randomly blocks/unblocks/kills `n` worker processes. The test runs in its own process so the shell stays responsive (kill it with `kill <pid>` when you are done).
+- `test_sync <n> <use_sem>` — spawns pairs of increment/decrement workers. Run it with `<use_sem>=0` to expose the race condition and with `<use_sem>=1` to verify the synchronised path.
+- `test_mm [bytes]` — exercises the memory manager in a separate process. You can override the amount of memory requested (default `100000000`).
 
 Suggested manual test flow:
 1. Run `loop -p 3` and `loop -p 1`; observe the higher-priority loop printing more often.
