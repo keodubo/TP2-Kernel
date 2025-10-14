@@ -10,7 +10,7 @@
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
-#define SYS_CALLS_QTY 37
+#define SYS_CALLS_QTY 44
 
 extern uint8_t hasregisterInfo;
 extern const uint64_t registerInfo[17];
@@ -19,7 +19,7 @@ extern int _hlt();
 extern Color WHITE;
 extern Color BLACK;
 
-static uint64_t sys_read(uint64_t fd, char *buff)
+static uint64_t sys_read_tty(uint64_t fd, char *buff)
 {
     if (fd != 0)
     {
@@ -36,7 +36,7 @@ static int sys_drawCursor()
     return 1;
 }
 
-static uint64_t sys_write(uint64_t fd, char buffer)
+static uint64_t sys_write_tty(uint64_t fd, char buffer)
 {
     if (fd != 1)
     {
@@ -216,9 +216,9 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
     switch (rax)
     {
     case 0:
-        return sys_read(rdi, (char *)rsi);
+        return sys_read_tty(rdi, (char *)rsi);
     case 1:
-        return sys_write(rdi, (char)rsi);
+        return sys_write_tty(rdi, (char)rsi);
     case 2:
         return sys_clear();
     case 3:
@@ -301,6 +301,22 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         return sys_sem_close((int)rdi);
     case 35:
         return sys_sem_unlink((const char*)rdi);
+    case 36:
+        return sys_pipe_open((const char*)rdi, (int)rsi);
+    case 37:
+        return sys_pipe_close((int)rdi);
+    case 38:
+        return sys_pipe_read((int)rdi, (void*)rsi, (int)rdx);
+    case 39:
+        return sys_pipe_write((int)rdi, (const void*)rsi, (int)rdx);
+    case 40:
+        return sys_pipe_unlink((const char*)rdi);
+    case 41:
+        return sys_read((int)rdi, (void*)rsi, (int)rdx);
+    case 42:
+        return sys_write((int)rdi, (const void*)rsi, (int)rdx);
+    case 43:
+        return sys_close((int)rdi);
     default:
         return 0;
     }

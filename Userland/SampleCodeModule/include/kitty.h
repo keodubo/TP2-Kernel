@@ -5,7 +5,7 @@
 #include "userlib.h"
 #define MAX_BUFF 254
 #define MAX_COMMAND 20
-#define MAX_ARGS 24
+#define MAX_ARGS 32
 #define USERNAME_SIZE 16
 #define NEW_LINE '\n'
 #define BACKSPACE '\b'

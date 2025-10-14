@@ -17,4 +17,16 @@ int      sys_sem_post(int sem_id);
 int      sys_sem_close(int sem_id);
 int      sys_sem_unlink(const char *name);
 
+// Pipes (Hito 5)
+int      sys_pipe_open(const char *name, int flags);  // flags: 1=R, 2=W, 3=RW
+int      sys_pipe_close(int fd);
+int      sys_pipe_read(int fd, void *buf, int n);
+int      sys_pipe_write(int fd, const void *buf, int n);
+int      sys_pipe_unlink(const char *name);
+
+// FD genéricos
+int      sys_read(int fd, void *buf, int n);
+int      sys_write(int fd, const void *buf, int n);
+int      sys_close(int fd);
+
 #endif

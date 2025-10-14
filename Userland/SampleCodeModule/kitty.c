@@ -17,6 +17,11 @@ uint64_t test_sync(uint64_t argc, char *argv[]);
 uint64_t test_no_synchro(uint64_t argc, char *argv[]);
 uint64_t test_synchro(uint64_t argc, char *argv[]);
 
+// Declaraciones de los comandos de pipes
+int cat_main(int argc, char **argv);
+int wc_main(int argc, char **argv);
+int filter_main(int argc, char **argv);
+
 static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int index, const char *fallback);
 static void free_spawn_args(char **argv, int argc);
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv);
@@ -212,6 +217,33 @@ static const char *state_to_string(int state);
 static int next_token(const char *src, int *index, char *out, int max_len);
 static int parse_int_token(const char *token, int *value);
 static void loop_process(int argc, char **argv);
+
+// Forward declarations for cmd functions
+void cmd_undefined(void);
+void cmd_help(void);
+void cmd_time(void);
+void cmd_clear(void);
+void cmd_registersinfo(void);
+void cmd_zeroDiv(void);
+void cmd_invOpcode(void);
+void cmd_exit(void);
+void cmd_ascii(void);
+void cmd_eliminator(void);
+void cmd_test_mm(void);
+void cmd_test_processes(void);
+void cmd_test_sync(void);
+void cmd_test_no_synchro(void);
+void cmd_test_synchro(void);
+void cmd_debug(void);
+void cmd_ps(void);
+void cmd_loop(void);
+void cmd_nice(void);
+void cmd_kill(void);
+void cmd_yield(void);
+void cmd_cat(void);
+void cmd_wc(void);
+void cmd_filter(void);
+
 void printHelp()
 {
 	printsColor("\n\n===== Listing a preview of available commands =====\n", MAX_BUFF, GREEN);
@@ -228,6 +260,9 @@ void printHelp()
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>cat                - read from stdin and write to stdout (test pipes)", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>wc                 - count lines from stdin (test pipes)", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>filter             - remove vowels from stdin (test pipes)", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
 	printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
@@ -245,7 +280,7 @@ void printHelp()
 	printsColor("  nice 3 1               - change process 3 priority to 1\n\n", MAX_BUFF, WHITE);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "cat", "wc", "filter"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -268,7 +303,10 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_loop,
 	cmd_nice,
 	cmd_kill,
-	cmd_yield
+	cmd_yield,
+	cmd_cat,
+	cmd_wc,
+	cmd_filter
 };
 
 void kitty()
@@ -927,6 +965,27 @@ void cmd_yield()
 {
 	sys_yield();
 	prints("\nYield requested", MAX_BUFF);
+}
+
+void cmd_cat()
+{
+	prints("\n", MAX_BUFF);
+	char *argv[1] = {"cat"};
+	cat_main(1, argv);
+}
+
+void cmd_wc()
+{
+	prints("\n", MAX_BUFF);
+	char *argv[1] = {"wc"};
+	wc_main(1, argv);
+}
+
+void cmd_filter()
+{
+	prints("\n", MAX_BUFF);
+	char *argv[1] = {"filter"};
+	filter_main(1, argv);
 }
 
 void historyCaller(int direction)

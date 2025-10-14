@@ -2,6 +2,11 @@
 #include "include/sched.h"
 #include "include/semaphore.h"
 #include "include/interrupts.h"
+#include "include/pipe.h"
+#include "include/fd.h"
+
+// Forward declaration del PIPE_OPS definido en pipe_fd.c
+extern const struct fd_ops PIPE_OPS;
 
 uint64_t sys_getpid(void) {
     pcb_t *cur = sched_current();
@@ -137,4 +142,76 @@ int sys_sem_close(int sem_id) {
 
 int sys_sem_unlink(const char *name) {
     return ksem_unlink(name);
+}
+
+// ========================================
+// Pipes (Hito 5)
+// ========================================
+
+int sys_pipe_open(const char *name, int flags) {
+    if (name == NULL) {
+        return -1;
+    }
+    
+    bool for_read = (flags & 1) != 0;
+    bool for_write = (flags & 2) != 0;
+    
+    if (!for_read && !for_write) {
+        return -1; // Debe ser al menos R o W
+    }
+    
+    kpipe_t *p = NULL;
+    if (kpipe_open(name, for_read, for_write, &p) < 0) {
+        return -1;
+    }
+    
+    return fd_alloc(FD_PIPE, p, for_read, for_write, &PIPE_OPS);
+}
+
+int sys_pipe_close(int fd) {
+    return fd_close(fd);
+}
+
+int sys_pipe_read(int fd, void *buf, int n) {
+    kfd_t *f = fd_get(fd);
+    if (f == NULL || !f->can_read || f->type != FD_PIPE) {
+        return -1;
+    }
+    return kpipe_read((kpipe_t *)f->ptr, buf, n);
+}
+
+int sys_pipe_write(int fd, const void *buf, int n) {
+    kfd_t *f = fd_get(fd);
+    if (f == NULL || !f->can_write || f->type != FD_PIPE) {
+        return -1;
+    }
+    return kpipe_write((kpipe_t *)f->ptr, buf, n);
+}
+
+int sys_pipe_unlink(const char *name) {
+    return kpipe_unlink(name);
+}
+
+// ========================================
+// FD genéricos
+// ========================================
+
+int sys_read(int fd, void *buf, int n) {
+    kfd_t *f = fd_get(fd);
+    if (f == NULL || f->ops == NULL || f->ops->read == NULL) {
+        return -1;
+    }
+    return f->ops->read(fd, buf, n);
+}
+
+int sys_write(int fd, const void *buf, int n) {
+    kfd_t *f = fd_get(fd);
+    if (f == NULL || f->ops == NULL || f->ops->write == NULL) {
+        return -1;
+    }
+    return f->ops->write(fd, buf, n);
+}
+
+int sys_close(int fd) {
+    return fd_close(fd);
 }

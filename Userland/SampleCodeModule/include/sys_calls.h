@@ -97,6 +97,18 @@ int64_t sys_sem_post(int sem_id);
 int64_t sys_sem_close(int sem_id);
 int64_t sys_sem_unlink(const char *name);
 
+// Pipes (Hito 5)
+int sys_pipe_open(const char *name, int flags);  // flags: 1=R, 2=W, 3=RW
+int sys_pipe_close(int fd);
+int sys_pipe_read(int fd, void *buf, int n);
+int sys_pipe_write(int fd, const void *buf, int n);
+int sys_pipe_unlink(const char *name);
+
+// FD genéricos (pueden usar stdin=0, stdout=1, stderr=2)
+int sys_read_fd(int fd, void *buf, int n);
+int sys_write_fd(int fd, const void *buf, int n);
+int sys_close_fd(int fd);
+
 #define MIN_PRIORITY 0
 #define MAX_PRIORITY 3
 #define DEFAULT_PRIORITY 2

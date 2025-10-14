@@ -34,6 +34,14 @@ GLOBAL sys_sem_close
 GLOBAL sys_sem_unlink
 GLOBAL sys_exit
 GLOBAL sys_proc_snapshot
+GLOBAL sys_pipe_open
+GLOBAL sys_pipe_close
+GLOBAL sys_pipe_read
+GLOBAL sys_pipe_write
+GLOBAL sys_pipe_unlink
+GLOBAL sys_read_fd
+GLOBAL sys_write_fd
+GLOBAL sys_close_fd
 section .text
 
 ; Pasaje de parametros en C:
@@ -227,5 +235,47 @@ sys_sem_close:
 
 sys_sem_unlink:
     mov rax, 0x23
+    int 80h
+    ret
+
+; Pipes (Hito 5)
+sys_pipe_open:
+    mov rax, 36
+    int 80h
+    ret
+
+sys_pipe_close:
+    mov rax, 37
+    int 80h
+    ret
+
+sys_pipe_read:
+    mov rax, 38
+    int 80h
+    ret
+
+sys_pipe_write:
+    mov rax, 39
+    int 80h
+    ret
+
+sys_pipe_unlink:
+    mov rax, 40
+    int 80h
+    ret
+
+; FD genéricos
+sys_read_fd:
+    mov rax, 41
+    int 80h
+    ret
+
+sys_write_fd:
+    mov rax, 42
+    int 80h
+    ret
+
+sys_close_fd:
+    mov rax, 43
     int 80h
     ret

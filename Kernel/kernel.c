@@ -9,6 +9,7 @@
 #include "interrupts.h"
 #include "memory_manager.h"
 #include "sched.h"
+#include "fd.h"
 
 
 
@@ -68,6 +69,9 @@ int main()
 	void* heap_start = (void*)((uint64_t)&endOfKernel + PageSize * 8);
 	size_t heap_size = 1024 * 1024; // 1MB de heap
 	mm_init(heap_start, heap_size);
+
+	// Inicializar sistema de file descriptors (Hito 5)
+	fd_init();
 
 	sched_init();
 
