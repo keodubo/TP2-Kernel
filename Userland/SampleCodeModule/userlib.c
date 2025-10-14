@@ -24,6 +24,7 @@ const Color LIGHT_ORANGE = {0, 160, 255};
 const Color LIGHT_YELLOW = {0, 224, 255};
 const Color LIGHT_PINK = {0, 100, 244};
 const Color LIGHT_GREEN = {0, 255, 0};
+const Color CYAN = {255, 255, 0};
 
 static char buffer[64] = {'0'};
 

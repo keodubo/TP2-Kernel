@@ -20,6 +20,7 @@ extern const Color LIGHT_ORANGE;
 extern const Color LIGHT_YELLOW;
 extern const Color LIGHT_PINK;
 extern const Color LIGHT_GREEN;
+extern const Color CYAN;
 
 typedef struct Note
 {

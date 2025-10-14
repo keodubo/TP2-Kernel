@@ -243,6 +243,7 @@ void cmd_yield(void);
 void cmd_cat(void);
 void cmd_wc(void);
 void cmd_filter(void);
+void cmd_echo(void);
 
 void printHelp()
 {
@@ -260,9 +261,10 @@ void printHelp()
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>cat                - read from stdin and write to stdout (test pipes)", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>wc                 - count lines from stdin (test pipes)", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>filter             - remove vowels from stdin (test pipes)", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>echo <text>        - print text to stdout", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>cat                - read from stdin and write to stdout", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>wc                 - count lines from stdin", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
 	printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
@@ -277,10 +279,16 @@ void printHelp()
 	printsColor("  test_processes 5       - test with 5 processes\n", MAX_BUFF, WHITE);
 	printsColor("  test_synchro 10 1      - synchronized test with params\n", MAX_BUFF, WHITE);
 	printsColor("  loop -p 2              - spawn loop process with priority 2\n", MAX_BUFF, WHITE);
-	printsColor("  nice 3 1               - change process 3 priority to 1\n\n", MAX_BUFF, WHITE);
+	printsColor("  nice 3 1               - change process 3 priority to 1\n", MAX_BUFF, WHITE);
+	printsColor("\n", MAX_BUFF, WHITE);
+	printsColor("Pipe examples:\n", MAX_BUFF, GREEN);
+	printsColor("  echo hola | wc         - count lines in 'hola'\n", MAX_BUFF, CYAN);
+	printsColor("  echo \"hola mundo\" | wc  - count lines with spaces\n", MAX_BUFF, CYAN);
+	printsColor("  echo abracadabra | filter - remove vowels\n", MAX_BUFF, CYAN);
+	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "cat", "wc", "filter"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "cat", "wc", "filter", "echo"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -306,7 +314,8 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_yield,
 	cmd_cat,
 	cmd_wc,
-	cmd_filter
+	cmd_filter,
+	cmd_echo
 };
 
 void kitty()
@@ -344,11 +353,147 @@ void printLine(char c)
 	lastc = c;
 }
 
+// Detecta si hay pipe '|' en la línea
+static int has_pipe(char *str) {
+	for (int i = 0; str[i] != '\0'; i++) {
+		if (str[i] == '|') {
+			return i;
+		}
+	}
+	return -1;
+}
+
+// Ejecuta comando con pipes
+static void execute_pipe(char *left_cmd, char *right_cmd) {
+	// Crear pipe nombrado temporal
+	const char *pipe_name = "tmp_pipe";
+	
+	// Abrir pipe para escritura (comando izquierdo)
+	int write_fd = sys_pipe_open(pipe_name, 2);  // 2 = WRITE
+	if (write_fd < 0) {
+		printsColor("\nError: failed to create pipe\n", MAX_BUFF, RED);
+		return;
+	}
+	
+	// Abrir pipe para lectura (comando derecho)
+	int read_fd = sys_pipe_open(pipe_name, 1);   // 1 = READ
+	if (read_fd < 0) {
+		sys_pipe_close(write_fd);
+		printsColor("\nError: failed to open pipe for reading\n", MAX_BUFF, RED);
+		return;
+	}
+	
+	// Ejecutar comando izquierdo (escribe al pipe)
+	// Verificar si empieza con "echo "
+	int is_echo = 0;
+	if (left_cmd[0] == 'e' && left_cmd[1] == 'c' && left_cmd[2] == 'h' && 
+	    left_cmd[3] == 'o' && left_cmd[4] == ' ') {
+		is_echo = 1;
+	}
+	
+	if (is_echo) {
+		// echo: escribe el texto al pipe
+		char *text = left_cmd + 5;
+		// Remover comillas si existen
+		if (text[0] == '"') {
+			text++;
+			int len = strlen(text);
+			if (len > 0 && text[len-1] == '"') {
+				text[len-1] = '\0';
+			}
+		}
+		sys_write_fd(write_fd, text, strlen(text));
+		sys_write_fd(write_fd, "\n", 1);
+	} else if (strcmp(left_cmd, "cat") == 0) {
+		// cat: lee stdin y escribe al pipe
+		char buf[256];
+		int n;
+		while ((n = sys_read_fd(0, buf, sizeof(buf))) > 0) {
+			sys_write_fd(write_fd, buf, n);
+		}
+	}
+	
+	// Cerrar escritura para indicar EOF
+	sys_pipe_close(write_fd);
+	
+	// Ejecutar comando derecho (lee del pipe)
+	if (strcmp(right_cmd, "wc") == 0) {
+		char buf[256];
+		int n;
+		int lines = 0;
+		while ((n = sys_read_fd(read_fd, buf, sizeof(buf))) > 0) {
+			for (int i = 0; i < n; i++) {
+				if (buf[i] == '\n') {
+					lines++;
+				}
+			}
+		}
+		printf("%d\n", lines);
+	} else if (strcmp(right_cmd, "filter") == 0) {
+		char buf[256];
+		int n;
+		while ((n = sys_read_fd(read_fd, buf, sizeof(buf))) > 0) {
+			for (int i = 0; i < n; i++) {
+				char c = buf[i];
+				// Solo imprimir si NO es vocal
+				if (!(c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' ||
+				      c == 'A' || c == 'E' || c == 'I' || c == 'O' || c == 'U')) {
+					printc(c);
+				}
+			}
+		}
+	}
+	
+	// Cerrar lectura
+	sys_close_fd(read_fd);
+	
+	// Limpiar pipe
+	sys_pipe_unlink(pipe_name);
+}
+
 void newLine()
 {
-	int i = checkLine();
-
-	(*commands_ptr[i])();
+	// Detectar si hay pipe
+	int pipe_pos = has_pipe(line);
+	
+	if (pipe_pos >= 0) {
+		// Separar comandos
+		char left_cmd[MAX_BUFF] = {0};
+		char right_cmd[MAX_BUFF] = {0};
+		
+		int i;
+		for (i = 0; i < pipe_pos && line[i] != '\0'; i++) {
+			left_cmd[i] = line[i];
+		}
+		left_cmd[i] = '\0';
+		
+		// Saltar el pipe y espacios
+		i = pipe_pos + 1;
+		while (i < linePos && line[i] == ' ') i++;
+		
+		int j = 0;
+		while (i < linePos && line[i] != '\0') {
+			right_cmd[j++] = line[i++];
+		}
+		right_cmd[j] = '\0';
+		
+		// Trim espacios
+		int len = strlen(left_cmd);
+		while (len > 0 && left_cmd[len-1] == ' ') {
+			left_cmd[--len] = '\0';
+		}
+		len = strlen(right_cmd);
+		while (len > 0 && right_cmd[len-1] == ' ') {
+			right_cmd[--len] = '\0';
+		}
+		
+		// Ejecutar con pipe
+		execute_pipe(left_cmd, right_cmd);
+	} else {
+		// Ejecución normal sin pipe
+		int i = checkLine();
+		(*commands_ptr[i])();
+	}
 
 	for (int i = 0; line[i] != '\0'; i++)
 	{
@@ -986,6 +1131,13 @@ void cmd_filter()
 	prints("\n", MAX_BUFF);
 	char *argv[1] = {"filter"};
 	filter_main(1, argv);
+}
+
+void cmd_echo()
+{
+	prints("\n", MAX_BUFF);
+	prints(parameter, MAX_BUFF);
+	prints("\n", MAX_BUFF);
 }
 
 void historyCaller(int direction)
