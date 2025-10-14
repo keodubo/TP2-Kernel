@@ -49,6 +49,29 @@ Suggested manual test flow:
 4. Use `yield` from the shell to force an immediate context switch to a loop.
 5. Finish by `kill <pid>` for each loop and confirm the scheduler falls back to the idle task.
 
+### Kernel Semaphores
+
+- `sys_sem_open(const char *name, unsigned init)` returns a handle (`int`) that represents the semaphore.
+- `sys_sem_wait(handle)` decrements the semaphore or blocks the caller (state `BLOCKED`) until a `sys_sem_post` wakes it.
+- `sys_sem_post(handle)` wakes exactly one waiter (FIFO order) or increments the count if no-one is waiting.
+- `sys_sem_close(handle)` releases the caller's reference. Pair it with `sys_sem_unlink(name)` to remove the semaphore from the namespace once all users have closed it.
+
+Example (userland):
+
+```
+int handle = sys_sem_open("mutex", 1);
+sys_sem_wait(handle);
+/* critical section */
+sys_sem_post(handle);
+sys_sem_close(handle);
+sys_sem_unlink("mutex");
+```
+
+### Semaphore demos
+
+- `test_no_synchro <n>` launches `2*n` workers that increment/decrement a shared counter **without** semaphores. The final value varies on each run, evidencing the race condition.
+- `test_synchro <n> [use_sem]` runs the synchronised flavour (defaults to using semaphores). With `use_sem=1` the final value is deterministically `0`, demonstrating the absence of busy-waiting and correct wake-up order. With `use_sem=0` it collapses to the unsynchronised behaviour.
+
 
 Author: Rodrigo Rearden (RowDaBoat)
 Collaborator: Augusto Nizzo McIntosh

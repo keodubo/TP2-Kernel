@@ -91,6 +91,12 @@ int64_t sys_exit(int code);
 
 int64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count);
 
+int64_t sys_sem_open(const char *name, unsigned int init);
+int64_t sys_sem_wait(int sem_id);
+int64_t sys_sem_post(int sem_id);
+int64_t sys_sem_close(int sem_id);
+int64_t sys_sem_unlink(const char *name);
+
 #define MIN_PRIORITY 0
 #define MAX_PRIORITY 3
 #define DEFAULT_PRIORITY 2

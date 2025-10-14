@@ -1,5 +1,7 @@
 #include <stdint.h>
+#include <stddef.h>
 #include "../include/sys_calls.h"
+#include "../include/userlib.h"
 
 extern void endless_loop_wrapper(int, char**);
 extern void endless_loop_print_wrapper(int, char**);
@@ -70,29 +72,92 @@ int64_t my_unblock(uint64_t pid) {
   return (int64_t)sys_unblock((int)pid);
 }
 
+typedef struct {
+  char name[32];
+  int handle;
+  int in_use;
+} sem_entry_t;
+
+static sem_entry_t sem_entries[16] = {0};
+
+static int find_sem_entry(const char *name) {
+  for (int i = 0; i < 16; i++) {
+    if (sem_entries[i].in_use && strcmp(sem_entries[i].name, name) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+static int store_sem_entry(const char *name, int handle) {
+  int idx = find_sem_entry(name);
+  if (idx >= 0) {
+    sem_entries[idx].handle = handle;
+    return idx;
+  }
+  for (int i = 0; i < 16; i++) {
+    if (!sem_entries[i].in_use) {
+      strcpy(sem_entries[i].name, name);
+      sem_entries[i].handle = handle;
+      sem_entries[i].in_use = 1;
+      return i;
+    }
+  }
+  return -1;
+}
+
 int64_t my_sem_open(char *sem_id, uint64_t initialValue) {
-  (void)sem_id;
-  (void)initialValue;
-  // Semaphores not implemented yet
-  return 1;
+  if (sem_id == NULL) {
+    return -1;
+  }
+  int handle = (int)sys_sem_open(sem_id, (unsigned int)initialValue);
+  if (handle < 0) {
+    return -1;
+  }
+  if (store_sem_entry(sem_id, handle) < 0) {
+    sys_sem_close(handle);
+    return -1;
+  }
+  return handle;
 }
 
 int64_t my_sem_wait(char *sem_id) {
-  (void)sem_id;
-  // Semaphores not implemented yet
-  return 0;
+  int idx = find_sem_entry(sem_id);
+  if (idx < 0) {
+    return -1;
+  }
+  return sys_sem_wait(sem_entries[idx].handle);
 }
 
 int64_t my_sem_post(char *sem_id) {
-  (void)sem_id;
-  // Semaphores not implemented yet
-  return 0;
+  int idx = find_sem_entry(sem_id);
+  if (idx < 0) {
+    return -1;
+  }
+  return sys_sem_post(sem_entries[idx].handle);
 }
 
 int64_t my_sem_close(char *sem_id) {
-  (void)sem_id;
-  // Semaphores not implemented yet
-  return 0;
+  int idx = find_sem_entry(sem_id);
+  if (idx < 0) {
+    return -1;
+  }
+  int result = sys_sem_close(sem_entries[idx].handle);
+  if (result == 0) {
+    sem_entries[idx].in_use = 0;
+  }
+  return result;
+}
+
+int64_t my_sem_unlink(char *sem_id) {
+  int result = sys_sem_unlink(sem_id);
+  if (result == 0) {
+    int idx = find_sem_entry(sem_id);
+    if (idx >= 0) {
+      sem_entries[idx].in_use = 0;
+    }
+  }
+  return result;
 }
 
 int64_t my_yield() {

@@ -1,6 +1,7 @@
 #include <userlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <stddef.h>
 #include <sys_calls.h>
 #include <colors.h>
 #include <eliminator.h>
@@ -13,83 +14,180 @@
 uint64_t test_mm(uint64_t argc, char *argv[]);
 uint64_t test_processes(uint64_t argc, char *argv[]);
 uint64_t test_sync(uint64_t argc, char *argv[]);
+uint64_t test_no_synchro(uint64_t argc, char *argv[]);
+uint64_t test_synchro(uint64_t argc, char *argv[]);
+
+static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int index, const char *fallback);
+static void free_spawn_args(char **argv, int argc);
+static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv);
+static void debug_log(const char *tag, const char *msg);
+static void debug_log_u64(const char *tag, const char *label, uint64_t value);
+static void debug_dump_args(const char *tag, int argc, char **argv);
+
+static int debug_enabled = 0;
+#define DBG_MSG(msg) debug_log("kitty", msg)
+#define DBG_VAL(label, value) debug_log_u64("kitty", label, value)
+#define DBG_ARGS(argc, argv) debug_dump_args("kitty", argc, argv)
+
+static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int index, const char *fallback) {
+	if (dst == NULL || dst_len == 0) {
+		return;
+	}
+	if (argv != NULL && index >= 0 && argv[index] != NULL) {
+		char *src = argv[index];
+		size_t i;
+		for (i = 0; i < dst_len - 1 && src[i] != '\0'; i++) {
+			dst[i] = src[i];
+		}
+		dst[i] = '\0';
+		return;
+	}
+	size_t i;
+	for (i = 0; i < dst_len - 1 && fallback != NULL && fallback[i] != '\0'; i++) {
+		dst[i] = fallback[i];
+	}
+	dst[i] = '\0';
+}
+
+static void free_spawn_args(char **argv, int argc) {
+	if (argv == NULL) {
+		return;
+	}
+	for (int i = 0; i < argc; i++) {
+		if (argv[i] != NULL) {
+			sys_free(argv[i]);
+		}
+	}
+	sys_free(argv);
+}
+
+static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv) {
+    DBG_MSG("spawn_test_process");
+    DBG_VAL("argc", (uint64_t)argc);
+    int64_t pid = sys_create_process(entry, argc, argv, name, DEFAULT_PRIORITY);
+    if (pid < 0 && argv != NULL) {
+        free_spawn_args(argv, argc);
+    }
+    DBG_VAL("spawned pid", (uint64_t)pid);
+    return pid;
+}
+
+static void debug_log(const char *tag, const char *msg) {
+	if (!debug_enabled || tag == NULL || msg == NULL) {
+		return;
+	}
+	printf("[DBG][%s] %s\n", tag, msg);
+}
+
+static void debug_log_u64(const char *tag, const char *label, uint64_t value) {
+	if (!debug_enabled || tag == NULL || label == NULL) {
+		return;
+	}
+	printf("[DBG][%s] %s: %u\n", tag, label, (unsigned int)value);
+}
+
+static void debug_dump_args(const char *tag, int argc, char **argv) {
+	if (!debug_enabled || tag == NULL) {
+		return;
+	}
+	printf("[DBG][%s] argc=%d\n", tag, argc);
+	if (argv == NULL) {
+		printf("[DBG][%s] argv=(null)\n", tag);
+		return;
+	}
+	for (int i = 0; i < argc; i++) {
+		printf("[DBG][%s] argv[%d]=%s\n", tag, i, argv[i] ? argv[i] : "(null)");
+	}
+}
 
 // Wrappers para ejecutar tests como procesos
 void test_mm_process(int argc, char **argv) {
-    char arg_buffer[32] = "100000000";
-    if (argc > 0 && argv != NULL && argv[0] != NULL) {
-        int i;
-        for (i = 0; argv[0][i] != '\0' && i < (int)sizeof(arg_buffer) - 1; i++) {
-            arg_buffer[i] = argv[0][i];
-        }
-        arg_buffer[i] = '\0';
-    }
+	char arg_buffer[32];
+	DBG_ARGS(argc, argv);
+	DBG_MSG("test_mm_process start");
+	
+	printf("\n[test_mm_process] Starting with argc=%d\n", argc);
+	copy_arg_or_default(arg_buffer, sizeof(arg_buffer), argv, 0, "100000000");
+	printf("[test_mm_process] Using arg: %s\n", arg_buffer);
+	free_spawn_args(argv, argc);
 
-    if (argv != NULL) {
-        if (argc > 0 && argv[0] != NULL) {
-            sys_free(argv[0]);
-        }
-        sys_free(argv);
-    }
-
-    char *args[2] = {arg_buffer, NULL};
-    uint64_t result = test_mm(1, args);
-    sys_exit((int)result);
+	char *args[2] = {arg_buffer, NULL};
+	printf("[test_mm_process] Calling test_mm...\n");
+	uint64_t result = test_mm(1, args);
+	printf("[test_mm_process] Finished with result: %d\n", (int)result);
+	sys_exit((int)result);
 }
 
 void test_processes_process(int argc, char **argv) {
-    char arg_buffer[32] = "10";
-    if (argc > 0 && argv != NULL && argv[0] != NULL) {
-        int i;
-        for (i = 0; argv[0][i] != '\0' && i < (int)sizeof(arg_buffer) - 1; i++) {
-            arg_buffer[i] = argv[0][i];
-        }
-        arg_buffer[i] = '\0';
-    }
+	char arg_buffer[32];
+	DBG_ARGS(argc, argv);
+	DBG_MSG("test_processes_process start");
+	
+	printf("\n[test_processes_process] Starting with argc=%d\n", argc);
+	copy_arg_or_default(arg_buffer, sizeof(arg_buffer), argv, 0, "10");
+	printf("[test_processes_process] Using arg: %s\n", arg_buffer);
+	free_spawn_args(argv, argc);
 
-    if (argv != NULL) {
-        if (argc > 0 && argv[0] != NULL) {
-            sys_free(argv[0]);
-        }
-        sys_free(argv);
-    }
-
-    char *args[2] = {arg_buffer, NULL};
-    test_processes(1, args);
-    sys_exit(0);
+	char *args[2] = {arg_buffer, NULL};
+	printf("[test_processes_process] Calling test_processes...\n");
+	test_processes(1, args);
+	printf("[test_processes_process] Finished\n");
+	sys_exit(0);
 }
 
 void test_sync_process(int argc, char **argv) {
-    char arg0_buffer[32] = "10";
-    char arg1_buffer[32] = "1";
+	char arg0_buffer[32];
+	char arg1_buffer[32];
+	DBG_ARGS(argc, argv);
+	DBG_MSG("test_sync_process start");
+	
+	printf("\n[test_sync_process] Starting with argc=%d\n", argc);
+	copy_arg_or_default(arg0_buffer, sizeof(arg0_buffer), argv, 0, "10");
+	copy_arg_or_default(arg1_buffer, sizeof(arg1_buffer), argv, 1, "1");
+	printf("[test_sync_process] Using args: %s, %s\n", arg0_buffer, arg1_buffer);
+	free_spawn_args(argv, argc);
 
-    if (argc >= 1 && argv != NULL && argv[0] != NULL) {
-        int i;
-        for (i = 0; argv[0][i] != '\0' && i < (int)sizeof(arg0_buffer) - 1; i++) {
-            arg0_buffer[i] = argv[0][i];
-        }
-        arg0_buffer[i] = '\0';
-    }
-    if (argc >= 2 && argv != NULL && argv[1] != NULL) {
-        int i;
-        for (i = 0; argv[1][i] != '\0' && i < (int)sizeof(arg1_buffer) - 1; i++) {
-            arg1_buffer[i] = argv[1][i];
-        }
-        arg1_buffer[i] = '\0';
-    }
+	char *args[3] = {arg0_buffer, arg1_buffer, NULL};
+	printf("[test_sync_process] Calling test_sync...\n");
+	test_sync(2, args);
+	printf("[test_sync_process] Finished\n");
+	sys_exit(0);
+}
 
-    if (argv != NULL) {
-        for (int i = 0; i < argc; i++) {
-            if (argv[i] != NULL) {
-                sys_free(argv[i]);
-            }
-        }
-        sys_free(argv);
-    }
+void test_no_synchro_process(int argc, char **argv) {
+	char arg_buffer[32];
+	DBG_ARGS(argc, argv);
+	DBG_MSG("test_no_synchro_process start");
+	
+	printf("\n[test_no_synchro_process] Starting with argc=%d\n", argc);
+	copy_arg_or_default(arg_buffer, sizeof(arg_buffer), argv, 0, "10");
+	printf("[test_no_synchro_process] Using arg: %s\n", arg_buffer);
+	free_spawn_args(argv, argc);
 
-    char *args[3] = {arg0_buffer, arg1_buffer, NULL};
-    test_sync(2, args);
-    sys_exit(0);
+	char *args[3] = {arg_buffer, "0", NULL};
+	printf("[test_no_synchro_process] Calling test_no_synchro...\n");
+	test_no_synchro(2, args);
+	printf("[test_no_synchro_process] Finished\n");
+	sys_exit(0);
+}
+
+void test_synchro_process(int argc, char **argv) {
+	char arg0_buffer[32];
+	char arg1_buffer[32];
+	DBG_ARGS(argc, argv);
+	DBG_MSG("test_synchro_process start");
+	
+	printf("\n[test_synchro_process] Starting with argc=%d\n", argc);
+	copy_arg_or_default(arg0_buffer, sizeof(arg0_buffer), argv, 0, "10");
+	copy_arg_or_default(arg1_buffer, sizeof(arg1_buffer), argv, 1, "1");
+	printf("[test_synchro_process] Using args: %s, %s\n", arg0_buffer, arg1_buffer);
+	free_spawn_args(argv, argc);
+
+	char *args[3] = {arg0_buffer, arg1_buffer, NULL};
+	printf("[test_synchro_process] Calling test_synchro...\n");
+	test_synchro(2, args);
+	printf("[test_synchro_process] Finished\n");
+	sys_exit(0);
 }
 
 // initialize all to 0
@@ -114,32 +212,40 @@ static const char *state_to_string(int state);
 static int next_token(const char *src, int *index, char *out, int max_len);
 static int parse_int_token(const char *token, int *value);
 static void loop_process(int argc, char **argv);
-
 void printHelp()
 {
-	printsColor("\n\n    >'help' or 'ls'     - displays this shell information", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >time               - display current time", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >clear              - clear the display", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >(+)                - increase font size (scaled)", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >(-)                - decrease font size (scaled)", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >registersinfo      - print current register values", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >zerodiv            - testeo divide by zero exception", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >ps                - list active processes", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >loop [-p prio]    - spawn a CPU-bound process", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >nice <pid> <prio>  - change priority of a process", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >kill <pid>        - terminate a process", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >yield             - yield the CPU", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >test_mm            - test memory manager", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >test_processes     - test process management", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >test_sync          - test synchronization", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n    >exit               - exit OS\n", MAX_BUFF, LIGHT_BLUE);
-
-	printc('\n');
+	printsColor("\n\n===== Listing a preview of available commands =====\n", MAX_BUFF, GREEN);
+	printsColor("\n>'help' or 'ls'     - displays this shell information", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>time               - display current time", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>clear              - clear the display", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>(+)                - increase font size (scaled)", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>(-)                - decrease font size (scaled)", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>registersinfo      - print current register values", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>zerodiv            - testeo divide by zero exception", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
+	printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
+	printsColor("\n>test_no_synchro [n]- run race condition without semaphores", MAX_BUFF, YELLOW);
+	printsColor("\n>test_synchro [n] [u] - run synchronized version using semaphores", MAX_BUFF, YELLOW);
+	printsColor("\n>test_sync [n] [u]  - alias for test_synchro", MAX_BUFF, YELLOW);
+	printsColor("\n>debug [on|off]     - toggle debug logging", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n\n", MAX_BUFF, WHITE);
+	printsColor("Examples:\n", MAX_BUFF, GREEN);
+	printsColor("  test_mm 50000000       - test memory manager with 50MB\n", MAX_BUFF, WHITE);
+	printsColor("  test_processes 5       - test with 5 processes\n", MAX_BUFF, WHITE);
+	printsColor("  test_synchro 10 1      - synchronized test with params\n", MAX_BUFF, WHITE);
+	printsColor("  loop -p 2              - spawn loop process with priority 2\n", MAX_BUFF, WHITE);
+	printsColor("  nice 3 1               - change process 3 priority to 1\n\n", MAX_BUFF, WHITE);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "ps", "loop", "nice", "kill", "yield"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -155,6 +261,9 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_test_mm,
 	cmd_test_processes,
 	cmd_test_sync,
+	cmd_test_no_synchro,
+	cmd_test_synchro,
+	cmd_debug,
 	cmd_ps,
 	cmd_loop,
 	cmd_nice,
@@ -368,145 +477,249 @@ void cmd_eliminator()
 
 void cmd_test_mm()
 {
-    char token[32];
-    int idx = 0;
-    int argc_spawn = 0;
-    char **argv_spawn = NULL;
+	printsColor("\n========================================", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    MEMORY MANAGER TEST", MAX_BUFF, YELLOW);
+	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
+	
+	char token[32];
+	int idx = 0;
+	int argc_spawn = 0;
+	char **argv_spawn = NULL;
 
-    if (next_token(parameter, &idx, token, sizeof(token))) {
-        size_t len = strlen(token) + 1;
-        char *arg0 = (char*)sys_malloc(len);
-        if (arg0 == NULL) {
-            printsColor("\nFailed to allocate args", MAX_BUFF, RED);
-            return;
-        }
-        strcpy(arg0, token);
+	if (next_token(parameter, &idx, token, sizeof(token))) {
+		size_t len = strlen(token) + 1;
+		char *arg0 = (char*)sys_malloc(len);
+		if (arg0 == NULL) {
+			printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+			return;
+		}
+		strcpy(arg0, token);
 
-        argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
-        if (argv_spawn == NULL) {
-            sys_free(arg0);
-            printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
-            return;
-        }
-        argv_spawn[0] = arg0;
-        argv_spawn[1] = NULL;
-        argc_spawn = 1;
-    }
+		argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
+		if (argv_spawn == NULL) {
+			sys_free(arg0);
+			printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+			return;
+		}
+		argv_spawn[0] = arg0;
+		argv_spawn[1] = NULL;
+		argc_spawn = 1;
+		printsColor("Testing with size: ", MAX_BUFF, WHITE);
+		printsColor(token, MAX_BUFF, GREEN);
+		printsColor("\n", MAX_BUFF, WHITE);
+	} else {
+		printsColor("Testing with default size: 100000000\n", MAX_BUFF, WHITE);
+	}
 
-    int64_t pid = sys_create_process(test_mm_process, argc_spawn, argv_spawn, "test_mm", DEFAULT_PRIORITY);
-    if (pid < 0) {
-        printsColor("\nFailed to launch test_mm", MAX_BUFF, RED);
-        if (argv_spawn != NULL) {
-            sys_free(argv_spawn[0]);
-            sys_free(argv_spawn);
-        }
-    } else {
-        printf("\nSpawned test_mm (pid %d)\n", (int)pid);
-    }
+	printsColor("Spawning test_mm process...\n", MAX_BUFF, LIGHT_BLUE);
+	int64_t pid = spawn_test_process("test_mm", test_mm_process, argc_spawn, argv_spawn);
+	if (pid < 0) {
+		printsColor("\n[ERROR] Failed to launch test_mm\n", MAX_BUFF, RED);
+	} else {
+		printsColor("CREATED 'test_mm' PROCESS (PID: ", MAX_BUFF, GREEN);
+		printf("%d)\n", (int)pid);
+		printsColor("Press Ctrl+C to stop if needed\n", MAX_BUFF, LIGHT_BLUE);
+	}
 }
 
 void cmd_test_processes()
 {
-    char token[32];
-    int idx = 0;
-    int argc_spawn = 0;
-    char **argv_spawn = NULL;
+	printsColor("\n========================================", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    PROCESS MANAGEMENT TEST", MAX_BUFF, YELLOW);
+	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
+	printsColor("Running test_processes\n", MAX_BUFF, WHITE);
+	printsColor("Press 1 or 2 to change process priorities or C to stop.\n", MAX_BUFF, ORANGE);
+	
+	char token[32];
+	int idx = 0;
+	int argc_spawn = 0;
+	char **argv_spawn = NULL;
 
-    if (next_token(parameter, &idx, token, sizeof(token))) {
-        size_t len = strlen(token) + 1;
-        char *arg0 = (char*)sys_malloc(len);
-        if (arg0 == NULL) {
-            printsColor("\nFailed to allocate args", MAX_BUFF, RED);
-            return;
-        }
-        strcpy(arg0, token);
+	if (next_token(parameter, &idx, token, sizeof(token))) {
+		size_t len = strlen(token) + 1;
+		char *arg0 = (char*)sys_malloc(len);
+		if (arg0 == NULL) {
+			printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+			return;
+		}
+		strcpy(arg0, token);
 
-        argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
-        if (argv_spawn == NULL) {
-            sys_free(arg0);
-            printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
-            return;
-        }
-        argv_spawn[0] = arg0;
-        argv_spawn[1] = NULL;
-        argc_spawn = 1;
-    }
+		argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
+		if (argv_spawn == NULL) {
+			sys_free(arg0);
+			printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+			return;
+		}
+		argv_spawn[0] = arg0;
+		argv_spawn[1] = NULL;
+		argc_spawn = 1;
+		printsColor("Testing with ", MAX_BUFF, WHITE);
+		printsColor(token, MAX_BUFF, GREEN);
+		printsColor(" processes\n", MAX_BUFF, WHITE);
+	} else {
+		printsColor("Testing with 10 processes (default)\n", MAX_BUFF, WHITE);
+	}
 
-    int64_t pid = sys_create_process(test_processes_process, argc_spawn, argv_spawn, "test_processes", DEFAULT_PRIORITY);
-    if (pid < 0) {
-        printsColor("\nFailed to launch test_processes", MAX_BUFF, RED);
-        if (argv_spawn != NULL) {
-            sys_free(argv_spawn[0]);
-            sys_free(argv_spawn);
-        }
-    } else {
-        printf("\nSpawned test_processes (pid %d)\n", (int)pid);
-    }
+	printsColor("Spawning test_processes...\n", MAX_BUFF, LIGHT_BLUE);
+	int64_t pid = spawn_test_process("test_processes", test_processes_process, argc_spawn, argv_spawn);
+	if (pid < 0) {
+		printsColor("\n[ERROR] Failed to launch test_processes\n", MAX_BUFF, RED);
+	} else {
+		printsColor("CREATED 'test_processes' PROCESS (PID: ", MAX_BUFF, GREEN);
+		printf("%d)\n", (int)pid);
+	}
 }
 
 void cmd_test_sync()
 {
-    char token0[32];
-    char token1[32];
-    int idx = 0;
-    int argc_spawn = 0;
-    char **argv_spawn = NULL;
+	cmd_test_synchro();
+}
 
-    int first = next_token(parameter, &idx, token0, sizeof(token0)) ? 1 : 0;
-    int second = next_token(parameter, &idx, token1, sizeof(token1)) ? 1 : 0;
+void cmd_test_no_synchro()
+{
+	printsColor("\n========================================", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n  RACE CONDITION TEST (NO SEMAPHORES)", MAX_BUFF, RED);
+	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
+	printsColor("Running test WITHOUT synchronization\n", MAX_BUFF, ORANGE);
+	printsColor("Expect to see RACE CONDITIONS!\n", MAX_BUFF, LIGHT_RED);
+	
+	char token[32];
+	int idx = 0;
+	int argc_spawn = 0;
+	char **argv_spawn = NULL;
 
-    if (first || second) {
-        size_t count = 0;
-        if (first) count++;
-        if (second) count++;
+	if (next_token(parameter, &idx, token, sizeof(token))) {
+		size_t len = strlen(token) + 1;
+		char *arg0 = (char*)sys_malloc(len);
+		if (arg0 == NULL) {
+			printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+			return;
+		}
+		strcpy(arg0, token);
 
-        argv_spawn = (char**)sys_malloc(sizeof(char*) * (count + 1));
-        if (argv_spawn == NULL) {
-            printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
-            return;
-        }
+		argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
+		if (argv_spawn == NULL) {
+			sys_free(arg0);
+			printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+			return;
+		}
+		argv_spawn[0] = arg0;
+		argv_spawn[1] = NULL;
+		argc_spawn = 1;
+		printsColor("Testing with ", MAX_BUFF, WHITE);
+		printsColor(token, MAX_BUFF, GREEN);
+		printsColor(" iterations\n", MAX_BUFF, WHITE);
+	} else {
+		printsColor("Testing with 10 iterations (default)\n", MAX_BUFF, WHITE);
+	}
 
-        size_t index = 0;
-        if (first) {
-            size_t len = strlen(token0) + 1;
-            char *arg0 = (char*)sys_malloc(len);
-            if (arg0 == NULL) {
-                sys_free(argv_spawn);
-                printsColor("\nFailed to allocate args", MAX_BUFF, RED);
-                return;
-            }
-            strcpy(arg0, token0);
-            argv_spawn[index++] = arg0;
-        }
-        if (second) {
-            size_t len = strlen(token1) + 1;
-            char *arg1 = (char*)sys_malloc(len);
-            if (arg1 == NULL) {
-                if (first) {
-                    sys_free(argv_spawn[0]);
-                }
-                sys_free(argv_spawn);
-                printsColor("\nFailed to allocate args", MAX_BUFF, RED);
-                return;
-            }
-            argv_spawn[index++] = arg1;
-        }
-        argv_spawn[index] = NULL;
-        argc_spawn = (int)count;
-    }
+	printsColor("Spawning test_no_synchro...\n", MAX_BUFF, LIGHT_BLUE);
+	int64_t pid = spawn_test_process("test_no_synchro", test_no_synchro_process, argc_spawn, argv_spawn);
+	if (pid < 0) {
+		printsColor("\n[ERROR] Failed to launch test_no_synchro\n", MAX_BUFF, RED);
+	} else {
+		printsColor("CREATED 'test_no_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
+		printf("%d)\n", (int)pid);
+	}
+}
 
-    int64_t pid = sys_create_process(test_sync_process, argc_spawn, argv_spawn, "test_sync", DEFAULT_PRIORITY);
-    if (pid < 0) {
-        printsColor("\nFailed to launch test_sync", MAX_BUFF, RED);
-        if (argv_spawn != NULL) {
-            for (int i = 0; i < argc_spawn; i++) {
-                sys_free(argv_spawn[i]);
-            }
-            sys_free(argv_spawn);
-        }
-    } else {
-        printf("\nSpawned test_sync (pid %d)\n", (int)pid);
-    }
+void cmd_test_synchro()
+{
+	printsColor("\n========================================", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n SYNCHRONIZED TEST (WITH SEMAPHORES)", MAX_BUFF, GREEN);
+	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
+	printsColor("Running test WITH synchronization\n", MAX_BUFF, ORANGE);
+	printsColor("Using semaphores to prevent race conditions\n", MAX_BUFF, LIGHT_GREEN);
+	
+	char token0[32];
+	char token1[32];
+	int idx = 0;
+	int argc_spawn = 0;
+	char **argv_spawn = NULL;
+
+	int first = next_token(parameter, &idx, token0, sizeof(token0)) ? 1 : 0;
+	int second = next_token(parameter, &idx, token1, sizeof(token1)) ? 1 : 0;
+
+	if (first || second) {
+		size_t count = 0;
+		if (first) count++;
+		if (second) count++;
+
+		argv_spawn = (char**)sys_malloc(sizeof(char*) * (count + 1));
+		if (argv_spawn == NULL) {
+			printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+			return;
+		}
+
+		size_t index = 0;
+		if (first) {
+			size_t len = strlen(token0) + 1;
+			char *arg0 = (char*)sys_malloc(len);
+			if (arg0 == NULL) {
+				sys_free(argv_spawn);
+				printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+				return;
+			}
+			strcpy(arg0, token0);
+			argv_spawn[index++] = arg0;
+		}
+		if (second) {
+			size_t len = strlen(token1) + 1;
+			char *arg1 = (char*)sys_malloc(len);
+			if (arg1 == NULL) {
+				if (first) {
+					sys_free(argv_spawn[0]);
+				}
+				sys_free(argv_spawn);
+				printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+				return;
+			}
+			strcpy(arg1, token1);
+			argv_spawn[index++] = arg1;
+		}
+		argv_spawn[index] = NULL;
+		argc_spawn = (int)count;
+		
+		printsColor("Testing with params: ", MAX_BUFF, WHITE);
+		if (first) {
+			printsColor(token0, MAX_BUFF, GREEN);
+		}
+		if (second) {
+			printsColor(" ", MAX_BUFF, WHITE);
+			printsColor(token1, MAX_BUFF, GREEN);
+		}
+		printsColor("\n", MAX_BUFF, WHITE);
+	} else {
+		printsColor("Testing with default params: 10 1\n", MAX_BUFF, WHITE);
+	}
+
+	printsColor("Spawning test_synchro...\n", MAX_BUFF, LIGHT_BLUE);
+	int64_t pid = spawn_test_process("test_synchro", test_synchro_process, argc_spawn, argv_spawn);
+	if (pid < 0) {
+		printsColor("\n[ERROR] Failed to launch test_synchro\n", MAX_BUFF, RED);
+	} else {
+		printsColor("CREATED 'test_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
+		printf("%d)\n", (int)pid);
+	}
+}
+
+void cmd_debug()
+{
+	if (parameter[0] == '\0') {
+		printf("\nDebug logging is %s\n", debug_enabled ? "ON" : "OFF");
+		return;
+	}
+
+	if (strcmp(parameter, "on") == 0) {
+		debug_enabled = 1;
+		printsColor("\nDebug logging enabled\n", MAX_BUFF, LIGHT_GREEN);
+		DBG_MSG("debug mode enabled");
+	} else if (strcmp(parameter, "off") == 0) {
+		debug_enabled = 0;
+		printsColor("\nDebug logging disabled\n", MAX_BUFF, LIGHT_RED);
+	} else {
+		printsColor("\nUsage: debug [on|off]\n", MAX_BUFF, ORANGE);
+	}
 }
 
 static const char *state_to_string(int state) {

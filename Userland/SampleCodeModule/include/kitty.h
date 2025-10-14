@@ -5,7 +5,7 @@
 #include "userlib.h"
 #define MAX_BUFF 254
 #define MAX_COMMAND 20
-#define MAX_ARGS 20
+#define MAX_ARGS 24
 #define USERNAME_SIZE 16
 #define NEW_LINE '\n'
 #define BACKSPACE '\b'
@@ -34,6 +34,9 @@ void cmd_eliminator();
 void cmd_test_mm();
 void cmd_test_processes();
 void cmd_test_sync();
+void cmd_test_no_synchro();
+void cmd_test_synchro();
+void cmd_debug();
 void cmd_ps();
 void cmd_loop();
 void cmd_nice();

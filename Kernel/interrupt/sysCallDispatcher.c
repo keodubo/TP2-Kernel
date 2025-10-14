@@ -10,7 +10,7 @@
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
-#define SYS_CALLS_QTY 32
+#define SYS_CALLS_QTY 37
 
 extern uint8_t hasregisterInfo;
 extern const uint64_t registerInfo[17];
@@ -291,6 +291,16 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         return sys_exit((int)rdi);
     case 30:
         return sys_proc_snapshot((proc_info_t*)rdi, rsi);
+    case 31:
+        return sys_sem_open((const char*)rdi, (unsigned int)rsi);
+    case 32:
+        return sys_sem_wait((int)rdi);
+    case 33:
+        return sys_sem_post((int)rdi);
+    case 34:
+        return sys_sem_close((int)rdi);
+    case 35:
+        return sys_sem_unlink((const char*)rdi);
     default:
         return 0;
     }

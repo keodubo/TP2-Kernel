@@ -27,6 +27,11 @@ GLOBAL sys_unblock
 GLOBAL sys_nice
 GLOBAL sys_yield
 GLOBAL sys_wait_pid
+GLOBAL sys_sem_open
+GLOBAL sys_sem_wait
+GLOBAL sys_sem_post
+GLOBAL sys_sem_close
+GLOBAL sys_sem_unlink
 GLOBAL sys_exit
 GLOBAL sys_proc_snapshot
 section .text
@@ -197,5 +202,30 @@ sys_exit:
 
 sys_proc_snapshot:
     mov rax, 0x1E
+    int 80h
+    ret
+
+sys_sem_open:
+    mov rax, 0x1F
+    int 80h
+    ret
+
+sys_sem_wait:
+    mov rax, 0x20
+    int 80h
+    ret
+
+sys_sem_post:
+    mov rax, 0x21
+    int 80h
+    ret
+
+sys_sem_close:
+    mov rax, 0x22
+    int 80h
+    ret
+
+sys_sem_unlink:
+    mov rax, 0x23
     int 80h
     ret
