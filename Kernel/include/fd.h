@@ -4,18 +4,21 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Tipos básicos de file descriptors que maneja el kernel
 typedef enum {
     FD_NONE,
     FD_TTY,
     FD_PIPE
 } fd_type_t;
 
+// Operaciones que cada backend debe implementar
 struct fd_ops {
     int (*read)(int fd, void *buf, int n);
     int (*write)(int fd, const void *buf, int n);
     int (*close)(int fd);
 };
 
+// Entrada de la tabla global de FDs
 typedef struct kfd {
     fd_type_t type;
     const struct fd_ops *ops;

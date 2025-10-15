@@ -1,3 +1,4 @@
+; Trampas ASM que invocan int 0x80 con el número correcto de syscall
 GLOBAL sys_read
 GLOBAL sys_write
 GLOBAL sys_clear

@@ -5,16 +5,18 @@
 #include "include/lib.h"
 #include "include/sched.h"
 
+// Implementación de pipes nominales con bloqueo y wakeups explícitos
+
 static kpipe_t *pipe_buckets[PIPE_HASH_BUCKETS] = {0};
 
 // Helpers internos
-static uint32_t pipe_hash(const char *name);
+static uint32_t pipe_hash(const char *name);          // Hash simple para tabla
 static int pipe_name_cmp(const char *a, const char *b);
 static void pipe_name_copy(char *dst, const char *src);
-static uint64_t irq_save(void);
+static uint64_t irq_save(void);                      // Helpers críticos
 static void irq_restore(uint64_t flags);
 static void pipe_free(kpipe_t *p);
-static void enqueue_reader(kpipe_t *p, pcb_t *proc);
+static void enqueue_reader(kpipe_t *p, pcb_t *proc); // Manejo de waiters
 static void enqueue_writer(kpipe_t *p, pcb_t *proc);
 static pcb_t* dequeue_reader(kpipe_t *p);
 static pcb_t* dequeue_writer(kpipe_t *p);
@@ -140,6 +142,7 @@ static pcb_t* dequeue_writer(kpipe_t *p) {
     return proc;
 }
 
+// Obtiene (o crea) un pipe identificado por nombre y ajusta contadores de uso
 int kpipe_open(const char* name, bool for_read, bool for_write, kpipe_t **out) {
     if (name == NULL || out == NULL) {
         return -1;
@@ -207,6 +210,7 @@ int kpipe_open(const char* name, bool for_read, bool for_write, kpipe_t **out) {
     return 0;
 }
 
+// Cierra un extremo del pipe y despierta a quienes necesiten continuar
 int kpipe_close(kpipe_t *p, bool was_read, bool was_write) {
     if (p == NULL) {
         return -1;
@@ -261,6 +265,7 @@ int kpipe_close(kpipe_t *p, bool was_read, bool was_write) {
     return 0;
 }
 
+// Lee del buffer circular; bloquea si no hay datos y aún existen escritores
 int kpipe_read(kpipe_t *p, void *buf, int n) {
     if (p == NULL || buf == NULL || n <= 0) {
         return -1;
@@ -337,6 +342,7 @@ int kpipe_read(kpipe_t *p, void *buf, int n) {
     return total_read;
 }
 
+// Escribe en el pipe; bloquea si el buffer está lleno y hay lectores activos
 int kpipe_write(kpipe_t *p, const void *buf, int n) {
     if (p == NULL || buf == NULL || n <= 0) {
         return -1;
@@ -412,6 +418,7 @@ int kpipe_write(kpipe_t *p, const void *buf, int n) {
     return total_written;
 }
 
+// Desvincula el nombre del pipe; se libera cuando no quedan referencias
 int kpipe_unlink(const char* name) {
     if (name == NULL) {
         return -1;

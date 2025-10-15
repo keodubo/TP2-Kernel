@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "sched.h"
 
+// Declaraciones de las llamadas al sistema expuestas a userland
+
 uint64_t sys_getpid(void);
 uint64_t sys_yield(void);
 uint64_t sys_exit(int code);

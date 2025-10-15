@@ -6,8 +6,11 @@
 #include "include/sched.h"
 #include "videoDriver.h"
 
+// Backend de la TTY principal: buffer circular + colas de procesos bloqueados
+
 #define TTY_BUFFER_CAP 256
 
+// Nodo de la cola de espera para lectores del teclado
 typedef struct tty_waiter {
     pcb_t *proc;
     struct tty_waiter *next;
@@ -71,6 +74,7 @@ static pcb_t *dequeue_waiter(tty_t *t) {
     return proc;
 }
 
+// Devuelve la instancia singleton de la consola
 tty_t *tty_default(void) {
     if (!default_tty_initialized) {
         memset(&default_tty, 0, sizeof(default_tty));
@@ -79,6 +83,7 @@ tty_t *tty_default(void) {
     return &default_tty;
 }
 
+// Bloqueante: consume datos del buffer o espera a que lleguen
 int tty_read(tty_t *t, void *buf, int n) {
     if (t == NULL || buf == NULL || n <= 0) {
         return -1;
@@ -130,6 +135,7 @@ int tty_read(tty_t *t, void *buf, int n) {
     return total;
 }
 
+// Escribe caracteres en pantalla (TTY es de salida inmediata)
 int tty_write(tty_t *t, const void *buf, int n) {
     (void)t;
     if (buf == NULL || n <= 0) {
@@ -143,11 +149,13 @@ int tty_write(tty_t *t, const void *buf, int n) {
     return n;
 }
 
+// Cerrar la TTY no hace nada; mantiene compatibilidad con fd_ops
 int tty_close(tty_t *t) {
     (void)t;
     return 0;
 }
 
+// Encola un nuevo carácter proveniente del teclado y despierta lectores
 void tty_push_char(tty_t *t, char c) {
     if (t == NULL) {
         return;
@@ -183,6 +191,7 @@ void tty_push_char(tty_t *t, char c) {
     }
 }
 
+// Entrada principal desde el driver de teclado (solo encola si es printable)
 void tty_handle_input(uint8_t scancode, char ascii) {
     (void)scancode;
     if (ascii == 0) {

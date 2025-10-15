@@ -2,6 +2,7 @@
 #include "include/stdio.h"
 #include "include/sys_calls.h"
 
+// Lee en bloques y solo imprime cuando detecta fin de línea o EOF
 int cat_main(int argc, char **argv) {
     (void)argc;
     (void)argv;
@@ -12,7 +13,7 @@ int cat_main(int argc, char **argv) {
     
     while ((n = sys_read_fd(0, buf + used, (int)(sizeof(buf) - used))) > 0) {
         used += n;
-        
+
         int segment_start = 0;
         for (int i = 0; i < used; i++) {
             if (buf[i] == '\n') {
@@ -39,6 +40,7 @@ int cat_main(int argc, char **argv) {
     }
     
     if (n == 0 && used > 0) {
+        // EOF: volcar lo que quedó sin salto de línea
         sys_write_fd(1, buf, used);
     }
     

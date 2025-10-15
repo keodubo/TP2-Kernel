@@ -2,7 +2,7 @@
 #include "include/fd.h"
 #include "include/pipe.h"
 
-// Implementación de vtable para pipes
+// Adaptadores para exponer los pipes a través de la interfaz de file descriptors
 
 static int fd_pipe_read(int fd, void *buf, int n) {
     kfd_t *f = fd_get(fd);

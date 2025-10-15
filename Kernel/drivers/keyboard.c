@@ -1,10 +1,11 @@
+// Rutinas básicas para manejar el teclado PS/2 y traducir scancodes
 #include "keyboard.h"
 #include "time.h"
 #include <tty.h>
 #include <stdint.h>
 
 unsigned char notChar = 0;
-static char retChar = 0;
+static char retChar = 0;          // Último carácter ASCII traducido
 static int shift = 0;
 static int capsLock = 0;
 static int ctrl = 0;
@@ -143,6 +144,7 @@ static const char *const keyMap[] = {keyMapL, keyMapU};
  * Down: 0x50
  */
 
+// Interrupción de teclado: actualiza modificadores y entrega el ASCII a la TTY
 void keyboard_handler(uint8_t keyPressed)
 {
     notChar = keyPressed;
@@ -180,6 +182,7 @@ void keyboard_handler(uint8_t keyPressed)
     }
 }
 
+// Traduce el scancode actual a ASCII (considerando Shift/Caps y Ctrl)
 char getCharFromKeyboard()
 {
     // soltar tecla
@@ -213,10 +216,12 @@ char getCharFromKeyboard()
 
 void setCeroChar()
 {
+    // Limpia el último scancode para evitar lecturas residuales
     notChar = 0;
 }
 
 unsigned char getNotChar()
 {
+    // Exponer el scancode para teclas especiales
     return notChar;
 }

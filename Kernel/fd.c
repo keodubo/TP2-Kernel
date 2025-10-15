@@ -1,3 +1,4 @@
+// Gestor simple de file descriptors compartido entre kernel y userland
 #include <stddef.h>
 #include "include/fd.h"
 #include "include/lib.h"
@@ -9,6 +10,7 @@
 // TODO: migrar a per-process cuando se implemente gestión completa de procesos
 static kfd_t fd_table[FD_MAX];
 
+// Helpers mínimos para ejecutar secciones críticas breves
 static uint64_t irq_save_local(void) {
     uint64_t flags;
     __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
@@ -22,6 +24,7 @@ static void irq_restore_local(uint64_t flags) {
     }
 }
 
+// Adaptadores entre FDs y backend de TTY
 static int fd_tty_read(int fd, void *buf, int n) {
     kfd_t *f = fd_get(fd);
     if (f == NULL || !f->can_read || f->ptr == NULL) {
@@ -53,6 +56,7 @@ static const struct fd_ops TTY_OPS = {
 };
 
 void fd_init(void) {
+    // Limpiar la tabla global; cada entrada se completa vía fd_alloc
     for (int i = 0; i < FD_MAX; i++) {
         fd_table[i].type = FD_NONE;
         fd_table[i].ops = NULL;
@@ -64,6 +68,7 @@ void fd_init(void) {
 }
 
 void fd_init_std(void) {
+    // Inicializar stdin/stdout/stderr apuntando a la TTY principal
     tty_t *tty = tty_default();
     if (tty == NULL) {
         return;
@@ -81,6 +86,7 @@ void fd_init_std(void) {
 }
 
 int fd_alloc(fd_type_t type, void *ptr, bool rd, bool wr, const struct fd_ops *ops) {
+    // Reserva el primer slot disponible para el recurso indicado
     if (ptr == NULL || ops == NULL) {
         return -1;
     }
@@ -113,6 +119,7 @@ kfd_t* fd_get(int fd) {
 }
 
 int fd_close(int fd) {
+    // Cerrar el descriptor y liberar el slot
     if (fd < 0 || fd >= FD_MAX) {
         return -1;
     }
@@ -139,6 +146,7 @@ int fd_close(int fd) {
 }
 
 int fd_dup2(int oldfd, int newfd) {
+    // Clona oldfd sobre newfd, incrementando referencias si es un pipe
     if (oldfd < 0 || oldfd >= FD_MAX || newfd < 0 || newfd >= FD_MAX) {
         return -1;
     }

@@ -3,11 +3,13 @@
 #include "include/interrupts.h"
 #include "include/lib.h"
 
+// Semáforos nombrados en kernel space, con hash table y colas de espera
+
 #define SEM_HANDLE_MAX 128
 
 static ksem_t *sem_buckets[KSEM_HASH_BUCKETS] = {0};
 
-static uint32_t sem_hash(const char *name);
+static uint32_t sem_hash(const char *name);      // Hash simple (djb2)
 static uint32_t sem_name_len(const char *name);
 static int sem_name_cmp(const char *a, const char *b);
 static void sem_name_copy(char *dst, const char *src);
@@ -80,6 +82,7 @@ static void sem_free(ksem_t *sem) {
     mm_free(sem);
 }
 
+// Obtiene (o crea) un semáforo nominal y ajusta su refcount
 int ksem_open(const char *name, unsigned int init, ksem_t **out) {
     if (name == NULL || out == NULL) {
         return -1;
@@ -146,6 +149,7 @@ int ksem_open(const char *name, unsigned int init, ksem_t **out) {
     return 0;
 }
 
+// Decrementa el semáforo o bloquea al proceso si el contador está en cero
 int ksem_wait(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -194,6 +198,7 @@ int ksem_wait(ksem_t *sem) {
     return 0;
 }
 
+// Incrementa el semáforo y despierta a un proceso bloqueado, si lo hay
 int ksem_post(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -222,6 +227,7 @@ int ksem_post(ksem_t *sem) {
     return 0;
 }
 
+// Libera la referencia local; el semáforo se elimina al llegar a cero
 int ksem_close(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -242,6 +248,7 @@ int ksem_close(ksem_t *sem) {
     return 0;
 }
 
+// Elimina el nombre del semáforo para futuras aperturas
 int ksem_unlink(const char *name) {
     if (name == NULL) {
         return -1;

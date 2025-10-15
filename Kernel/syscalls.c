@@ -5,6 +5,8 @@
 #include "include/pipe.h"
 #include "include/fd.h"
 
+// Implementación de cada syscall expuesta a userland
+
 // Forward declaration del PIPE_OPS definido en pipe_fd.c
 extern const struct fd_ops PIPE_OPS;
 
@@ -51,8 +53,9 @@ uint64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count) {
     return (uint64_t)proc_snapshot(buffer, (int)max_count);
 }
 
-static ksem_t *sem_handles[KSEM_HANDLE_MAX] = {0};
+static ksem_t *sem_handles[KSEM_HANDLE_MAX] = {0}; // Tabla de handles estilo POSIX
 
+// Helpers locales para proteger la tabla de handles
 static uint64_t irq_save_local(void) {
     uint64_t flags;
     __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
@@ -66,6 +69,7 @@ static void irq_restore_local(uint64_t flags) {
     }
 }
 
+// Reserva un slot de handle para un semáforo abierto
 static int sem_handle_allocate(ksem_t *sem) {
     uint64_t flags = irq_save_local();
     for (int i = 0; i < KSEM_HANDLE_MAX; i++) {
@@ -79,6 +83,7 @@ static int sem_handle_allocate(ksem_t *sem) {
     return -1;
 }
 
+// Obtiene el puntero asociado sin modificar la tabla
 static ksem_t *sem_handle_peek(int handle) {
     if (handle <= 0 || handle > KSEM_HANDLE_MAX) {
         return NULL;
@@ -89,6 +94,7 @@ static ksem_t *sem_handle_peek(int handle) {
     return sem;
 }
 
+// Desasocia el handle en la tabla (ksem_close se encarga del refcount)
 static ksem_t *sem_handle_detach(int handle) {
     if (handle <= 0 || handle > KSEM_HANDLE_MAX) {
         return NULL;
@@ -147,6 +153,7 @@ int sys_sem_unlink(const char *name) {
 // ========================================
 // Pipes (Hito 5)
 // ========================================
+// Las funciones delegan en kpipe_* y usan la tabla de FDs para compartir
 
 int sys_pipe_open(const char *name, int flags) {
     if (name == NULL) {
@@ -195,7 +202,7 @@ int sys_pipe_unlink(const char *name) {
 // ========================================
 // FD genéricos
 // ========================================
-
+// Estas wrappers invocan a la vtable del descriptor solicitado
 int sys_read(int fd, void *buf, int n) {
     kfd_t *f = fd_get(fd);
     if (f == NULL || f->ops == NULL || f->ops->read == NULL) {

@@ -8,6 +8,8 @@
 #include <syscalls.h>
 #include <tty.h>
 
+// Puente entre interrupciones de software y las funciones del kernel
+
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
@@ -20,6 +22,7 @@ extern int _hlt();
 extern Color WHITE;
 extern Color BLACK;
 
+// Versión legacy de lectura para FD 0 (TTY)
 static uint64_t sys_read_tty(uint64_t fd, char *buff)
 {
     if (fd != 0 || buff == NULL)
@@ -40,6 +43,7 @@ static int sys_drawCursor()
     return 1;
 }
 
+// Versión legacy de escritura para FD 1 (TTY)
 static uint64_t sys_write_tty(uint64_t fd, char buffer)
 {
     if (fd != 1)

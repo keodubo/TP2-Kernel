@@ -2,6 +2,7 @@
 #include "include/stdio.h"
 #include "include/sys_calls.h"
 
+// Devuelve 1 si el carácter es una vocal ASCII
 static int is_vowel(char c) {
     return (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' ||
             c == 'A' || c == 'E' || c == 'I' || c == 'O' || c == 'U');

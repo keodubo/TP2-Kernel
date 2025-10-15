@@ -11,6 +11,8 @@
 #include "sched.h"
 #include "fd.h"
 
+// Punto de entrada del kernel: inicializa subsistemas básicos y arranca userland
+
 
 
 extern uint8_t text;
@@ -61,7 +63,7 @@ void * initializeKernelBinary()
 
 
 int main()
-{	
+{ 
 	load_idt();
 
 	// Inicializar el memory manager
@@ -86,6 +88,7 @@ int main()
     return 0;
 }
 
+// Primer proceso: transfiere el control al módulo de userland y lo finaliza al salir
 static void userland_bootstrap(int argc, char** argv) {
 	(void)argc;
 	(void)argv;

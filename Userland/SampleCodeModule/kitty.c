@@ -10,6 +10,8 @@
 #include "../tests/test_util.h"
 #include "../tests/syscall.h"
 
+// Shell interactiva: parsea comandos, gestiona pipes y utilidades de tests
+
 // Declaraciones de las funciones de test
 uint64_t test_mm(uint64_t argc, char *argv[]);
 uint64_t test_processes(uint64_t argc, char *argv[]);
@@ -29,6 +31,7 @@ int filter_main(int argc, char **argv);
 #define SHELL_BACKUP_STDOUT 61
 #define PIPE_TMP_NAME_LEN 32
 
+// Helpers para pipelines y parsing de comandos
 static void sanitize_echo_text(const char *src, char *dst, int max_len);
 static int parse_command_line(const char *input, char *out_cmd, char *out_param);
 static int run_pipeline_command(const char *cmd, const char *param);
@@ -330,6 +333,7 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_echo
 };
 
+// Bucle principal de la shell: lee caracteres y procesa líneas completas
 void kitty()
 {
 	char c;
@@ -343,6 +347,7 @@ void kitty()
 	}
 }
 
+// Actualiza el buffer de línea según la tecla recibida
 void printLine(char c)
 {
 	if (c == 0)
@@ -371,6 +376,7 @@ void printLine(char c)
 }
 
 // Detecta si hay pipe '|' en la línea
+// Recorta espacios y comillas de los textos de echo
 static void sanitize_echo_text(const char *src, char *dst, int max_len) {
 	if (dst == NULL || max_len <= 0) {
 		return;
@@ -410,6 +416,7 @@ static void sanitize_echo_text(const char *src, char *dst, int max_len) {
 	dst[len] = 0;
 }
 
+// Divide "cmd arg" en comando y parámetros sencillos
 static int parse_command_line(const char *input, char *out_cmd, char *out_param) {
 	if (input == NULL || out_cmd == NULL || out_param == NULL) {
 		return -1;
@@ -448,6 +455,7 @@ static int parse_command_line(const char *input, char *out_cmd, char *out_param)
 	return (cmd_len > 0) ? 0 : -1;
 }
 
+// Imprime el texto de echo, preservando salto final cuando corresponde
 static void echo_output(const char *param, int interactive) {
 	char text[MAX_BUFF + 1];
 	sanitize_echo_text(param, text, sizeof(text));
@@ -464,6 +472,7 @@ static void echo_output(const char *param, int interactive) {
 	sys_write_fd(SHELL_STDOUT, &newline, 1);
 }
 
+// Ejecuta la implementación real de cada comando soportado en pipelines
 static int run_pipeline_command(const char *cmd, const char *param) {
 	if (cmd == NULL || cmd[0] == 0) {
 		return -1;
@@ -502,7 +511,7 @@ static int has_pipe(char *str) {
 	return -1;
 }
 
-// Ejecuta comando con pipes
+// Ejecuta dos comandos conectados por pipe reutilizando los mismos FDs
 static void execute_pipe(char *left_line, char *right_line) {
 	char left_cmd[MAX_BUFF + 1] = {0};
 	char left_param[MAX_BUFF + 1] = {0};
@@ -616,6 +625,7 @@ cleanup:
 	}
 }
 
+// Ejecuta la línea actual (con o sin pipeline) y reinicia el prompt
 void newLine()
 {
 	// Detectar si hay pipe
@@ -771,6 +781,7 @@ void cmd_charsizeminus()
 	printPrompt();
 }
 
+// Inserta caracteres imprimibles o maneja atajos (historial, tamaño fuente)
 void handleSpecialCommands(char c)
 {
 	if (c == PLUS)

@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <colors.h>
 
+// Wrapper de syscalls que el userland expone como librería estándar
+
 // Estructura para informacion de memoria (debe coincidir con la del kernel)
 typedef struct {
     uint64_t total_memory;

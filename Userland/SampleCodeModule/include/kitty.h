@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include "userlib.h"
+
+// Constantes y prototipos de la shell interactiva "kitty"
 #define MAX_BUFF 254
 #define MAX_COMMAND 20
 #define MAX_ARGS 32

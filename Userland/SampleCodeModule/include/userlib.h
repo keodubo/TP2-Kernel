@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <colors.h>
 
+// Librería de utilidades de userland: IO, cadenas y helpers gráficos
+
 extern const Color BLACK;
 extern const Color WHITE;
 extern const Color RED;

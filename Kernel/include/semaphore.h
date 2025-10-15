@@ -5,15 +5,19 @@
 #include <stdint.h>
 #include "sched.h"
 
+// Parámetros globales del sistema de semáforos nombrados
+
 #define KSEM_NAME_MAX     32
 #define KSEM_HASH_BUCKETS 32
 #define KSEM_HANDLE_MAX   128
 
+// Cola de procesos bloqueados sobre el semáforo
 typedef struct sem_waiter {
     pcb_t *proc;
     struct sem_waiter *next;
 } sem_waiter_t;
 
+// Semáforo kernel-space compartido entre procesos
 typedef struct ksem {
     char name[KSEM_NAME_MAX];
     unsigned int count;

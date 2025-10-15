@@ -5,15 +5,19 @@
 #include <stdbool.h>
 #include "sched.h"
 
+// Configuración del buffer circular y la tabla hash de pipes
+
 #define PIPE_CAP 4096
 #define PIPE_NAME_MAX 32
 #define PIPE_HASH_BUCKETS 16
 
+// Nodo de cola para procesos bloqueados por lectura/escritura
 typedef struct pipe_waiter {
     pcb_t *proc;
     struct pipe_waiter *next;
 } pipe_waiter_t;
 
+// Estructura interna de un pipe nominal del kernel
 typedef struct kpipe {
     char name[PIPE_NAME_MAX];
     uint8_t buf[PIPE_CAP];
