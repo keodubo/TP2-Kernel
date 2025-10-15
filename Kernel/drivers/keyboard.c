@@ -176,7 +176,7 @@ void keyboard_handler(uint8_t keyPressed)
     char ascii = getCharFromKeyboard();
     if (ascii != 0)
     {
-        tty_push_char(tty_default(), ascii);
+        tty_handle_input(notChar, ascii);
     }
 }
 

@@ -360,7 +360,6 @@ void printLine(char c)
 	}
 	else if (c == BACKSPACE && linePos > 0)
 	{
-		printc(c);
 		line[--linePos] = 0;
 	}
 	else if (c == NEW_LINE)
@@ -668,7 +667,6 @@ void newLine()
 	}
 	linePos = 0;
 
-	prints("\n", MAX_BUFF);
 	printPrompt();
 }
 
@@ -792,7 +790,6 @@ void handleSpecialCommands(char c)
 	else
 	{
 		line[linePos++] = c;
-		printc(c);
 	}
 }
 
@@ -1279,21 +1276,18 @@ void cmd_yield()
 
 void cmd_cat()
 {
-	prints("\n", MAX_BUFF);
 	char *argv[1] = {"cat"};
 	cat_main(1, argv);
 }
 
 void cmd_wc()
 {
-	prints("\n", MAX_BUFF);
 	char *argv[1] = {"wc"};
 	wc_main(1, argv);
 }
 
 void cmd_filter()
 {
-	prints("\n", MAX_BUFF);
 	char *argv[1] = {"filter"};
 	filter_main(1, argv);
 }

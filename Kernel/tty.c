@@ -182,3 +182,32 @@ void tty_push_char(tty_t *t, char c) {
         proc_unblock(proc->pid);
     }
 }
+
+void tty_handle_input(uint8_t scancode, char ascii) {
+    if (ascii == 0) {
+        return;
+    }
+
+    tty_t *t = tty_default();
+    if (t == NULL) {
+        return;
+    }
+
+    tty_push_char(t, ascii);
+
+    if (ascii == '\n') {
+        vDriver_newline();
+        return;
+    }
+
+    if (ascii == '\b') {
+        vDriver_backspace(WHITE, BLACK);
+        return;
+    }
+
+    if (ascii >= ' ' && ascii <= '~') {
+        if (scancode != 0x48 && scancode != 0x50 && scancode != 0x4B && scancode != 0x4D) {
+            vDriver_print(ascii, WHITE, BLACK);
+        }
+    }
+}
