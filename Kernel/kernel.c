@@ -69,7 +69,7 @@ int main()
 	// Inicializar el memory manager
 	// El heap empieza despues del stack (32KB despues de endOfKernel)
 	void* heap_start = (void*)((uint64_t)&endOfKernel + PageSize * 8);
-	size_t heap_size = 1024 * 1024; // 1MB de heap
+	size_t heap_size = 4 * 1024 * 1024; // 4MB de heap para stacks y procesos
 	mm_init(heap_start, heap_size);
 
 	// Inicializar sistema de file descriptors (Hito 5)

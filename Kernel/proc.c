@@ -87,7 +87,6 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     pcb_t *parent = sched_current();
     if (parent != NULL) {
         proc->parent_pid = parent->pid;
-        link_child(parent, proc);
     }
 
     proc->kstack_base = (uint8_t *)mm_malloc(KSTACK_SIZE);
@@ -97,6 +96,9 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     }
 
     setup_stack(proc);
+    if (parent != NULL) {
+        link_child(parent, proc);
+    }
     insert_proc(proc);
 
     sched_enqueue(proc);

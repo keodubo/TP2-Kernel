@@ -38,6 +38,9 @@ static int parse_command_line(const char *input, char *out_cmd, char *out_param)
 static int run_pipeline_command(const char *cmd, const char *param);
 static void echo_output(const char *param, int interactive);
 
+static void format_hex64(uint64_t value, char out[17]);
+static void print_hex64(uint64_t value);
+
 static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int index, const char *fallback);
 static void free_spawn_args(char **argv, int argc);
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv);
@@ -806,11 +809,11 @@ void cmd_charsizeminus()
 // Inserta caracteres imprimibles o maneja atajos (historial, tamaño fuente)
 void handleSpecialCommands(char c)
 {
-	if (c == PLUS)
+	if (c == PLUS && linePos == 0)
 	{
 		cmd_charsizeplus();
 	}
-	else if (c == MINUS)
+	else if (c == MINUS && linePos == 0)
 	{
 		cmd_charsizeminus();
 	}
@@ -1239,15 +1242,11 @@ void cmd_ps()
 	{
 		const char *state = state_to_string(info[i].state);
 		const char *fg = info[i].fg ? "FG" : "BG";
-		printf("PID %d PRIO %d STATE %s TICKS %d %s 0x%016llx 0x%016llx %s\n",
-		       info[i].pid,
-		       info[i].priority,
-		       state,
-		       info[i].ticks_left,
-		       fg,
-		       (unsigned long long)info[i].sp,
-		       (unsigned long long)info[i].bp,
-		       info[i].name);
+		printf("PID %d PRIO %d STATE %s TICKS %d %s ", info[i].pid, info[i].priority, state, info[i].ticks_left, fg);
+		print_hex64(info[i].sp);
+		printc(' ');
+		print_hex64(info[i].bp);
+		printf(" %s\n", info[i].name);
 	}
 }
 
@@ -1467,4 +1466,19 @@ void welcome()
 
 	printsColor("    Here's a list of available commands\n", MAX_BUFF, GREEN);
 	printHelp();
+}
+static void format_hex64(uint64_t value, char out[17]) {
+	static const char *digits = "0123456789ABCDEF";
+	for (int i = 15; i >= 0; i--) {
+		out[i] = digits[value & 0xF];
+		value >>= 4;
+	}
+	out[16] = '\0';
+}
+
+static void print_hex64(uint64_t value) {
+	char buf[17];
+	format_hex64(value, buf);
+	prints("0x", MAX_BUFF);
+	prints(buf, MAX_BUFF);
 }
