@@ -22,6 +22,18 @@ int cat_main(int argc, char **argv);
 int wc_main(int argc, char **argv);
 int filter_main(int argc, char **argv);
 
+#define SHELL_STDIN 0
+#define SHELL_STDOUT 1
+#define SHELL_STDERR 2
+#define SHELL_BACKUP_STDIN 60
+#define SHELL_BACKUP_STDOUT 61
+#define PIPE_TMP_NAME_LEN 32
+
+static void sanitize_echo_text(const char *src, char *dst, int max_len);
+static int parse_command_line(const char *input, char *out_cmd, char *out_param);
+static int run_pipeline_command(const char *cmd, const char *param);
+static void echo_output(const char *param, int interactive);
+
 static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int index, const char *fallback);
 static void free_spawn_args(char **argv, int argc);
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv);
@@ -333,6 +345,11 @@ void kitty()
 
 void printLine(char c)
 {
+	if (c == 0)
+	{
+		lastc = c;
+		return;
+	}
 	if (linePos >= MAX_BUFF || c == lastc)
 	{
 		return;
@@ -354,6 +371,128 @@ void printLine(char c)
 }
 
 // Detecta si hay pipe '|' en la línea
+static void sanitize_echo_text(const char *src, char *dst, int max_len) {
+	if (dst == NULL || max_len <= 0) {
+		return;
+	}
+	dst[0] = 0;
+	if (src == NULL) {
+		return;
+	}
+
+	int start = 0;
+	while (src[start] == ' ') {
+		start++;
+	}
+
+	int end = strlen(src);
+	while (end > start && (src[end - 1] == ' ' || src[end - 1] == '\n' || src[end - 1] == '\r' || src[end - 1] == '\t')) {
+		end--;
+	}
+
+	if (end - start >= 2 && src[start] == '"' && src[end - 1] == '"') {
+		start++;
+		end--;
+	}
+
+	int len = end - start;
+	if (len <= 0) {
+		dst[0] = 0;
+		return;
+	}
+	if (len > max_len - 1) {
+		len = max_len - 1;
+	}
+
+	for (int i = 0; i < len; i++) {
+		dst[i] = src[start + i];
+	}
+	dst[len] = 0;
+}
+
+static int parse_command_line(const char *input, char *out_cmd, char *out_param) {
+	if (input == NULL || out_cmd == NULL || out_param == NULL) {
+		return -1;
+	}
+
+	int i = 0;
+	while (input[i] == ' ') {
+		i++;
+	}
+
+	int cmd_len = 0;
+	while (input[i] != 0 && input[i] != ' ') {
+		if (cmd_len < MAX_BUFF) {
+			out_cmd[cmd_len++] = input[i];
+		}
+		i++;
+	}
+	out_cmd[cmd_len] = 0;
+
+	while (input[i] == ' ') {
+		i++;
+	}
+
+	int param_len = 0;
+	while (input[i] != 0) {
+		if (param_len < MAX_BUFF) {
+			out_param[param_len++] = input[i];
+		}
+		i++;
+	}
+	while (param_len > 0 && out_param[param_len - 1] == ' ') {
+		param_len--;
+	}
+	out_param[param_len] = 0;
+
+	return (cmd_len > 0) ? 0 : -1;
+}
+
+static void echo_output(const char *param, int interactive) {
+	char text[MAX_BUFF + 1];
+	sanitize_echo_text(param, text, sizeof(text));
+
+	const char newline = '\n';
+	if (interactive) {
+		sys_write_fd(SHELL_STDOUT, &newline, 1);
+	}
+
+	int len = strlen(text);
+	if (len > 0) {
+		sys_write_fd(SHELL_STDOUT, text, len);
+	}
+	sys_write_fd(SHELL_STDOUT, &newline, 1);
+}
+
+static int run_pipeline_command(const char *cmd, const char *param) {
+	if (cmd == NULL || cmd[0] == 0) {
+		return -1;
+	}
+
+	if (strcmp(cmd, "cat") == 0) {
+		char *argv_cat[1] = {"cat"};
+		return cat_main(1, argv_cat);
+	}
+
+	if (strcmp(cmd, "wc") == 0) {
+		char *argv_wc[1] = {"wc"};
+		return wc_main(1, argv_wc);
+	}
+
+	if (strcmp(cmd, "filter") == 0) {
+		char *argv_filter[1] = {"filter"};
+		return filter_main(1, argv_filter);
+	}
+
+	if (strcmp(cmd, "echo") == 0) {
+		echo_output(param, 0);
+		return 0;
+	}
+
+	printsColor("\n[pipe] Unsupported command in pipeline\n", MAX_BUFF, RED);
+	return -1;
+}
+
 static int has_pipe(char *str) {
 	for (int i = 0; str[i] != '\0'; i++) {
 		if (str[i] == '|') {
@@ -364,91 +503,117 @@ static int has_pipe(char *str) {
 }
 
 // Ejecuta comando con pipes
-static void execute_pipe(char *left_cmd, char *right_cmd) {
-	// Crear pipe nombrado temporal
-	const char *pipe_name = "tmp_pipe";
-	
-	// Abrir pipe para escritura (comando izquierdo)
-	int write_fd = sys_pipe_open(pipe_name, 2);  // 2 = WRITE
+static void execute_pipe(char *left_line, char *right_line) {
+	char left_cmd[MAX_BUFF + 1] = {0};
+	char left_param[MAX_BUFF + 1] = {0};
+	char right_cmd[MAX_BUFF + 1] = {0};
+	char right_param[MAX_BUFF + 1] = {0};
+
+	if (parse_command_line(left_line, left_cmd, left_param) < 0 ||
+	    parse_command_line(right_line, right_cmd, right_param) < 0) {
+		printsColor("\n[pipe] Invalid command syntax\n", MAX_BUFF, RED);
+		return;
+	}
+
+	static int pipe_seq = 0;
+	char pipe_name[PIPE_TMP_NAME_LEN];
+	sprintf(pipe_name, "tmp_pipe_%d", pipe_seq++);
+
+	int backup_in = -1;
+	int backup_out = -1;
+	int write_fd = -1;
+	int read_fd = -1;
+	int status = 0;
+	int pipe_created = 0;
+
+	backup_in = sys_dup2(SHELL_STDIN, SHELL_BACKUP_STDIN);
+	if (backup_in < 0) {
+		printsColor("\n[pipe] Failed to backup stdin\n", MAX_BUFF, RED);
+		status = -1;
+		goto cleanup;
+	}
+
+	backup_out = sys_dup2(SHELL_STDOUT, SHELL_BACKUP_STDOUT);
+	if (backup_out < 0) {
+		printsColor("\n[pipe] Failed to backup stdout\n", MAX_BUFF, RED);
+		status = -1;
+		goto cleanup;
+	}
+
+	write_fd = sys_pipe_open(pipe_name, 2);
 	if (write_fd < 0) {
-		printsColor("\nError: failed to create pipe\n", MAX_BUFF, RED);
-		return;
+		printsColor("\n[pipe] Failed to open pipe writer\n", MAX_BUFF, RED);
+		status = -1;
+		goto cleanup;
 	}
-	
-	// Abrir pipe para lectura (comando derecho)
-	int read_fd = sys_pipe_open(pipe_name, 1);   // 1 = READ
+
+	read_fd = sys_pipe_open(pipe_name, 1);
 	if (read_fd < 0) {
-		sys_pipe_close(write_fd);
-		printsColor("\nError: failed to open pipe for reading\n", MAX_BUFF, RED);
-		return;
+		printsColor("\n[pipe] Failed to open pipe reader\n", MAX_BUFF, RED);
+		status = -1;
+		goto cleanup;
 	}
-	
-	// Ejecutar comando izquierdo (escribe al pipe)
-	// Verificar si empieza con "echo "
-	int is_echo = 0;
-	if (left_cmd[0] == 'e' && left_cmd[1] == 'c' && left_cmd[2] == 'h' && 
-	    left_cmd[3] == 'o' && left_cmd[4] == ' ') {
-		is_echo = 1;
+	pipe_created = 1;
+
+	if (sys_dup2(write_fd, SHELL_STDOUT) < 0) {
+		printsColor("\n[pipe] Failed to redirect stdout\n", MAX_BUFF, RED);
+		status = -1;
+		goto cleanup;
 	}
-	
-	if (is_echo) {
-		// echo: escribe el texto al pipe
-		char *text = left_cmd + 5;
-		// Remover comillas si existen
-		if (text[0] == '"') {
-			text++;
-			int len = strlen(text);
-			if (len > 0 && text[len-1] == '"') {
-				text[len-1] = '\0';
-			}
-		}
-		sys_write_fd(write_fd, text, strlen(text));
-		sys_write_fd(write_fd, "\n", 1);
-	} else if (strcmp(left_cmd, "cat") == 0) {
-		// cat: lee stdin y escribe al pipe
-		char buf[256];
-		int n;
-		while ((n = sys_read_fd(0, buf, sizeof(buf))) > 0) {
-			sys_write_fd(write_fd, buf, n);
-		}
-	}
-	
-	// Cerrar escritura para indicar EOF
 	sys_pipe_close(write_fd);
-	
-	// Ejecutar comando derecho (lee del pipe)
-	if (strcmp(right_cmd, "wc") == 0) {
-		char buf[256];
-		int n;
-		int lines = 0;
-		while ((n = sys_read_fd(read_fd, buf, sizeof(buf))) > 0) {
-			for (int i = 0; i < n; i++) {
-				if (buf[i] == '\n') {
-					lines++;
-				}
-			}
-		}
-		printf("%d\n", lines);
-	} else if (strcmp(right_cmd, "filter") == 0) {
-		char buf[256];
-		int n;
-		while ((n = sys_read_fd(read_fd, buf, sizeof(buf))) > 0) {
-			for (int i = 0; i < n; i++) {
-				char c = buf[i];
-				// Solo imprimir si NO es vocal
-				if (!(c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' ||
-				      c == 'A' || c == 'E' || c == 'I' || c == 'O' || c == 'U')) {
-					printc(c);
-				}
+	write_fd = -1;
+
+	if (run_pipeline_command(left_cmd, left_param) < 0) {
+		status = -1;
+	}
+
+	if (backup_out >= 0) {
+		sys_dup2(backup_out, SHELL_STDOUT);
+		sys_close_fd(backup_out);
+		backup_out = -1;
+	}
+
+	if (status == 0) {
+		if (sys_dup2(read_fd, SHELL_STDIN) < 0) {
+			printsColor("\n[pipe] Failed to redirect stdin\n", MAX_BUFF, RED);
+			status = -1;
+		} else {
+			sys_pipe_close(read_fd);
+			read_fd = -1;
+			if (run_pipeline_command(right_cmd, right_param) < 0) {
+				status = -1;
 			}
 		}
 	}
-	
-	// Cerrar lectura
-	sys_close_fd(read_fd);
-	
-	// Limpiar pipe
-	sys_pipe_unlink(pipe_name);
+
+cleanup:
+	if (backup_in >= 0) {
+		sys_dup2(backup_in, SHELL_STDIN);
+		sys_close_fd(backup_in);
+		backup_in = -1;
+	}
+
+	if (backup_out >= 0) {
+		sys_dup2(backup_out, SHELL_STDOUT);
+		sys_close_fd(backup_out);
+		backup_out = -1;
+	}
+
+	if (read_fd >= 0) {
+		sys_pipe_close(read_fd);
+	}
+
+	if (write_fd >= 0) {
+		sys_pipe_close(write_fd);
+	}
+
+	if (pipe_created) {
+		sys_pipe_unlink(pipe_name);
+	}
+
+	if (status < 0) {
+		printsColor("\n[pipe] Execution failed\n", MAX_BUFF, RED);
+	}
 }
 
 void newLine()
@@ -1135,9 +1300,7 @@ void cmd_filter()
 
 void cmd_echo()
 {
-	prints("\n", MAX_BUFF);
-	prints(parameter, MAX_BUFF);
-	prints("\n", MAX_BUFF);
+	echo_output(parameter, 1);
 }
 
 void historyCaller(int direction)

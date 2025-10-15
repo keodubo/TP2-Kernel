@@ -1,11 +1,13 @@
 #include "keyboard.h"
 #include "time.h"
+#include <tty.h>
 #include <stdint.h>
 
 unsigned char notChar = 0;
 static char retChar = 0;
 static int shift = 0;
 static int capsLock = 0;
+static int ctrl = 0;
 
 static const char keyMapL[] = {
 
@@ -160,6 +162,22 @@ void keyboard_handler(uint8_t keyPressed)
     {
         capsLock = (capsLock + 1) % 2;
     }
+    // ctrl pressed
+    if (notChar == 0x1D)
+    {
+        ctrl = 1;
+    }
+    // ctrl released
+    if (notChar == 0x9D)
+    {
+        ctrl = 0;
+    }
+
+    char ascii = getCharFromKeyboard();
+    if (ascii != 0)
+    {
+        tty_push_char(tty_default(), ascii);
+    }
 }
 
 char getCharFromKeyboard()
@@ -176,6 +194,18 @@ char getCharFromKeyboard()
     else
     {
         retChar = keyMap[shift][notChar];
+    }
+
+    if (ctrl && retChar != 0)
+    {
+        if (retChar >= 'a' && retChar <= 'z')
+        {
+            retChar = retChar - 'a' + 1;
+        }
+        else if (retChar >= 'A' && retChar <= 'Z')
+        {
+            retChar = retChar - 'A' + 1;
+        }
     }
 
     return retChar;

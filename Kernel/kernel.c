@@ -72,6 +72,7 @@ int main()
 
 	// Inicializar sistema de file descriptors (Hito 5)
 	fd_init();
+	fd_init_std();
 
 	sched_init();
 

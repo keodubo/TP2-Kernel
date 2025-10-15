@@ -28,5 +28,6 @@ int      sys_pipe_unlink(const char *name);
 int      sys_read(int fd, void *buf, int n);
 int      sys_write(int fd, const void *buf, int n);
 int      sys_close(int fd);
+int      sys_dup2(int oldfd, int newfd);
 
 #endif

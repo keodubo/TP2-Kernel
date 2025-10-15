@@ -42,6 +42,7 @@ GLOBAL sys_pipe_unlink
 GLOBAL sys_read_fd
 GLOBAL sys_write_fd
 GLOBAL sys_close_fd
+GLOBAL sys_dup2
 section .text
 
 ; Pasaje de parametros en C:
@@ -277,5 +278,10 @@ sys_write_fd:
 
 sys_close_fd:
     mov rax, 43
+    int 80h
+    ret
+
+sys_dup2:
+    mov rax, 44
     int 80h
     ret

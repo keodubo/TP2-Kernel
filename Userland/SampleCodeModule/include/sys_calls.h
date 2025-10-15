@@ -108,6 +108,7 @@ int sys_pipe_unlink(const char *name);
 int sys_read_fd(int fd, void *buf, int n);
 int sys_write_fd(int fd, const void *buf, int n);
 int sys_close_fd(int fd);
+int sys_dup2(int oldfd, int newfd);
 
 #define MIN_PRIORITY 0
 #define MAX_PRIORITY 3

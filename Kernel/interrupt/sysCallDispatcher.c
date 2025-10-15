@@ -6,11 +6,12 @@
 #include <memory_manager.h>
 #include <sched.h>
 #include <syscalls.h>
+#include <tty.h>
 
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
-#define SYS_CALLS_QTY 44
+#define SYS_CALLS_QTY 45
 
 extern uint8_t hasregisterInfo;
 extern const uint64_t registerInfo[17];
@@ -21,13 +22,16 @@ extern Color BLACK;
 
 static uint64_t sys_read_tty(uint64_t fd, char *buff)
 {
-    if (fd != 0)
+    if (fd != 0 || buff == NULL)
     {
         return -1;
     }
 
-    *buff = getCharFromKeyboard();
-    return 0;
+    int read = tty_read(tty_default(), buff, 1);
+    if (read <= 0) {
+        buff[0] = 0;
+    }
+    return read;
 }
 
 static int sys_drawCursor()
@@ -43,8 +47,7 @@ static uint64_t sys_write_tty(uint64_t fd, char buffer)
         return -1;
     }
 
-    vDriver_print(buffer, WHITE, BLACK);
-    return 1;
+    return tty_write(tty_default(), &buffer, 1);
 }
 
 static uint64_t sys_writeColor(uint64_t fd, char buffer, Color color)
@@ -317,6 +320,8 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         return sys_write((int)rdi, (const void*)rsi, (int)rdx);
     case 43:
         return sys_close((int)rdi);
+    case 44:
+        return sys_dup2((int)rdi, (int)rsi);
     default:
         return 0;
     }

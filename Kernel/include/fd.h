@@ -32,8 +32,10 @@ typedef struct kfd {
 
 // APIs públicas
 void fd_init(void);
+void fd_init_std(void);
 int fd_alloc(fd_type_t type, void *ptr, bool rd, bool wr, const struct fd_ops *ops);
 kfd_t* fd_get(int fd);
 int fd_close(int fd);
+int fd_dup2(int oldfd, int newfd);
 
 #endif // FD_H

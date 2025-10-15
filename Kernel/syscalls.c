@@ -215,3 +215,7 @@ int sys_write(int fd, const void *buf, int n) {
 int sys_close(int fd) {
     return fd_close(fd);
 }
+
+int sys_dup2(int oldfd, int newfd) {
+    return fd_dup2(oldfd, newfd);
+}
