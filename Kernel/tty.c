@@ -184,6 +184,7 @@ void tty_push_char(tty_t *t, char c) {
 }
 
 void tty_handle_input(uint8_t scancode, char ascii) {
+    (void)scancode;
     if (ascii == 0) {
         return;
     }
@@ -194,20 +195,4 @@ void tty_handle_input(uint8_t scancode, char ascii) {
     }
 
     tty_push_char(t, ascii);
-
-    if (ascii == '\n') {
-        vDriver_newline();
-        return;
-    }
-
-    if (ascii == '\b') {
-        vDriver_backspace(WHITE, BLACK);
-        return;
-    }
-
-    if (ascii >= ' ' && ascii <= '~') {
-        if (scancode != 0x48 && scancode != 0x50 && scancode != 0x4B && scancode != 0x4D) {
-            vDriver_print(ascii, WHITE, BLACK);
-        }
-    }
 }

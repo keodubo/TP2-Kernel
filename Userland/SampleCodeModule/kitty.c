@@ -360,6 +360,7 @@ void printLine(char c)
 	}
 	else if (c == BACKSPACE && linePos > 0)
 	{
+		printc('\b');
 		line[--linePos] = 0;
 	}
 	else if (c == NEW_LINE)
@@ -667,6 +668,7 @@ void newLine()
 	}
 	linePos = 0;
 
+	printc('\n');
 	printPrompt();
 }
 
@@ -790,6 +792,7 @@ void handleSpecialCommands(char c)
 	else
 	{
 		line[linePos++] = c;
+		printc(c);
 	}
 }
 
