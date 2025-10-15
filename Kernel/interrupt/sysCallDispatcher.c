@@ -201,21 +201,6 @@ static uint64_t sys_kill(int pid)
     return proc_kill(pid);
 }
 
-static uint64_t sys_wait(int pid)
-{
-    if (pid <= 0) {
-        return (uint64_t)-1;
-    }
-
-    while (1) {
-        pcb_t *target = proc_by_pid(pid);
-        if (target == NULL || target->state == EXITED) {
-            return 0;
-        }
-        sys_yield();
-    }
-}
-
 uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t rax)
 {
     uint8_t r, g, b;
@@ -293,7 +278,7 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
     case 27:
         return sys_yield();
     case 28:
-        return sys_wait((int)rdi);
+        return sys_wait_pid((int)rdi, (int *)rsi);
     case 29:
         return sys_exit((int)rdi);
     case 30:

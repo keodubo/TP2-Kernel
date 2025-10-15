@@ -41,6 +41,18 @@ uint64_t sys_unblock(int pid) {
     return (uint64_t)proc_unblock(pid);
 }
 
+uint64_t sys_wait_pid(int pid, int *status) {
+    if (pid == 0) {
+        pid = -1;
+    }
+    int exit_status = 0;
+    int waited_pid = proc_wait(pid, &exit_status);
+    if (waited_pid >= 0 && status != NULL) {
+        *status = exit_status;
+    }
+    return (uint64_t)waited_pid;
+}
+
 uint64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count) {
     if (buffer == NULL || max_count == 0) {
         return 0;

@@ -1,14 +1,20 @@
 #include <stdint.h>
 #include <stddef.h>
+#include "syscall.h"
 #include "../include/sys_calls.h"
 #include "../include/userlib.h"
 
 extern void endless_loop_wrapper(int, char**);
 extern void endless_loop_print_wrapper(int, char**);
 extern uint64_t my_process_inc(uint64_t argc, char *argv[]);
+extern uint64_t priority_worker(uint64_t argc, char *argv[]);
 
 static void my_process_inc_entry(int argc, char **argv) {
   (void)my_process_inc((uint64_t)argc, argv);
+}
+
+static void priority_worker_entry(int argc, char **argv) {
+  (void)priority_worker((uint64_t)argc, argv);
 }
 
 int64_t my_getpid() {
@@ -48,6 +54,14 @@ int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
         }
         if (mpi[i] == '\0' && name[i] == '\0') {
           func = my_process_inc_entry;
+        } else {
+          char *pw = "priority_worker";
+          for (i = 0; pw[i] != '\0' && name[i] != '\0'; i++) {
+            if (pw[i] != name[i]) break;
+          }
+          if (pw[i] == '\0' && name[i] == '\0') {
+            func = priority_worker_entry;
+          }
         }
       }
     }
@@ -165,5 +179,9 @@ int64_t my_yield() {
 }
 
 int64_t my_wait(int64_t pid) {
-  return (int64_t)sys_wait((int)pid);
+  return my_wait_pid(pid, NULL);
+}
+
+int64_t my_wait_pid(int64_t pid, int *status) {
+  return (int64_t)sys_wait_pid((int)pid, status);
 }

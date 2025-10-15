@@ -15,6 +15,7 @@
 // Declaraciones de las funciones de test
 uint64_t test_mm(uint64_t argc, char *argv[]);
 uint64_t test_processes(uint64_t argc, char *argv[]);
+uint64_t test_priority(uint64_t argc, char *argv[]);
 uint64_t test_sync(uint64_t argc, char *argv[]);
 uint64_t test_no_synchro(uint64_t argc, char *argv[]);
 uint64_t test_synchro(uint64_t argc, char *argv[]);
@@ -142,7 +143,7 @@ void test_processes_process(int argc, char **argv) {
 	char arg_buffer[32];
 	DBG_ARGS(argc, argv);
 	DBG_MSG("test_processes_process start");
-	
+
 	printf("\n[test_processes_process] Starting with argc=%d\n", argc);
 	copy_arg_or_default(arg_buffer, sizeof(arg_buffer), argv, 0, "10");
 	printf("[test_processes_process] Using arg: %s\n", arg_buffer);
@@ -152,6 +153,23 @@ void test_processes_process(int argc, char **argv) {
 	printf("[test_processes_process] Calling test_processes...\n");
 	test_processes(1, args);
 	printf("[test_processes_process] Finished\n");
+	sys_exit(0);
+}
+
+void test_priority_process(int argc, char **argv) {
+	char arg_buffer[32];
+	DBG_ARGS(argc, argv);
+	DBG_MSG("test_priority_process start");
+
+	printf("\n[test_priority_process] Starting with argc=%d\n", argc);
+	copy_arg_or_default(arg_buffer, sizeof(arg_buffer), argv, 0, "1500");
+	printf("[test_priority_process] Using window: %s ms\n", arg_buffer);
+	free_spawn_args(argv, argc);
+
+	char *args[2] = {arg_buffer, NULL};
+	printf("[test_priority_process] Calling test_priority...\n");
+	test_priority(1, args);
+	printf("[test_priority_process] Finished\n");
 	sys_exit(0);
 }
 
@@ -245,6 +263,7 @@ void cmd_ascii(void);
 void cmd_eliminator(void);
 void cmd_test_mm(void);
 void cmd_test_processes(void);
+void cmd_test_priority(void);
 void cmd_test_sync(void);
 void cmd_test_no_synchro(void);
 void cmd_test_synchro(void);
@@ -254,6 +273,7 @@ void cmd_loop(void);
 void cmd_nice(void);
 void cmd_kill(void);
 void cmd_yield(void);
+void cmd_waitpid(void);
 void cmd_cat(void);
 void cmd_wc(void);
 void cmd_filter(void);
@@ -274,14 +294,16 @@ void printHelp()
 	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
+    printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
+    printsColor("\n>waitpid <pid|-1>  - wait for a child to finish", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>echo <text>        - print text to stdout", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>cat                - read from stdin and write to stdout", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>wc                 - count lines from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
-	printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
+    printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
+    printsColor("\n>test_priority [ms]- scheduling demo (default: 1500)", MAX_BUFF, YELLOW);
 	printsColor("\n>test_no_synchro [n]- run race condition without semaphores", MAX_BUFF, YELLOW);
 	printsColor("\n>test_synchro [n] [u] - run synchronized version using semaphores", MAX_BUFF, YELLOW);
 	printsColor("\n>test_sync [n] [u]  - alias for test_synchro", MAX_BUFF, YELLOW);
@@ -289,9 +311,10 @@ void printHelp()
 	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n\n", MAX_BUFF, WHITE);
 	printsColor("Examples:\n", MAX_BUFF, GREEN);
-	printsColor("  test_mm 50000000       - test memory manager with 50MB\n", MAX_BUFF, WHITE);
-	printsColor("  test_processes 5       - test with 5 processes\n", MAX_BUFF, WHITE);
-	printsColor("  test_synchro 10 1      - synchronized test with params\n", MAX_BUFF, WHITE);
+    printsColor("  test_mm 50000000       - test memory manager with 50MB\n", MAX_BUFF, WHITE);
+    printsColor("  test_processes 5       - test with 5 processes\n", MAX_BUFF, WHITE);
+    printsColor("  test_priority 2000     - priority round robin demo\n", MAX_BUFF, WHITE);
+    printsColor("  test_synchro 10 1      - synchronized test with params\n", MAX_BUFF, WHITE);
 	printsColor("  loop -p 2              - spawn loop process with priority 2\n", MAX_BUFF, WHITE);
 	printsColor("  nice 3 1               - change process 3 priority to 1\n", MAX_BUFF, WHITE);
 	printsColor("\n", MAX_BUFF, WHITE);
@@ -302,7 +325,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "cat", "wc", "filter", "echo"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -317,6 +340,7 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_eliminator,
 	cmd_test_mm,
 	cmd_test_processes,
+	cmd_test_priority,
 	cmd_test_sync,
 	cmd_test_no_synchro,
 	cmd_test_synchro,
@@ -326,6 +350,7 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_nice,
 	cmd_kill,
 	cmd_yield,
+	cmd_waitpid,
 	cmd_cat,
 	cmd_wc,
 	cmd_filter,
@@ -926,6 +951,55 @@ void cmd_test_processes()
 	}
 }
 
+void cmd_test_priority()
+{
+	printsColor("\n========================================", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n    PRIORITY SCHEDULING TEST", MAX_BUFF, YELLOW);
+	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
+	printsColor("Running test_priority\n", MAX_BUFF, WHITE);
+	printsColor("Default window: 1500 ms (override with argument).\n", MAX_BUFF, ORANGE);
+
+	char token[32];
+	int idx = 0;
+	int argc_spawn = 0;
+	char **argv_spawn = NULL;
+
+	if (next_token(parameter, &idx, token, sizeof(token))) {
+		size_t len = strlen(token) + 1;
+		char *arg0 = (char*)sys_malloc(len);
+		if (arg0 == NULL) {
+			printsColor("\nFailed to allocate args", MAX_BUFF, RED);
+			return;
+		}
+		strcpy(arg0, token);
+
+		argv_spawn = (char**)sys_malloc(sizeof(char*) * 2);
+		if (argv_spawn == NULL) {
+			sys_free(arg0);
+			printsColor("\nFailed to allocate argv", MAX_BUFF, RED);
+			return;
+		}
+		argv_spawn[0] = arg0;
+		argv_spawn[1] = NULL;
+		argc_spawn = 1;
+		printsColor("Scheduling window: ", MAX_BUFF, WHITE);
+		printsColor(token, MAX_BUFF, GREEN);
+		printsColor(" ms\n", MAX_BUFF, WHITE);
+	} else {
+		printsColor("Scheduling window: 1500 ms (default)\n", MAX_BUFF, WHITE);
+	}
+
+	printsColor("Spawning test_priority...\n", MAX_BUFF, LIGHT_BLUE);
+	int64_t pid = spawn_test_process("test_priority", test_priority_process, argc_spawn, argv_spawn);
+	if (pid < 0) {
+		printsColor("\n[ERROR] Failed to launch test_priority\n", MAX_BUFF, RED);
+	} else {
+		printsColor("CREATED 'test_priority' PROCESS (PID: ", MAX_BUFF, GREEN);
+		printf("%d)\n", (int)pid);
+		printsColor("Observe the counters to compare priorities.\n", MAX_BUFF, LIGHT_BLUE);
+	}
+}
+
 void cmd_test_sync()
 {
 	cmd_test_synchro();
@@ -1119,11 +1193,23 @@ static int parse_int_token(const char *token, int *value) {
 	if (token == NULL || token[0] == '\0') {
 		return 0;
 	}
+	int sign = 1;
+	if (token[0] == '-') {
+		sign = -1;
+		token++;
+		if (token[0] == '\0') {
+			return 0;
+		}
+	}
 	uint64_t parsed = charToInt((char *)token);
 	if (parsed == (uint64_t)-1) {
 		return 0;
 	}
-	*value = (int)parsed;
+	if (sign < 0) {
+		*value = -(int)parsed;
+	} else {
+		*value = (int)parsed;
+	}
 	return 1;
 }
 
@@ -1147,18 +1233,20 @@ void cmd_ps()
 		return;
 	}
 
-	printsColor("\nPID   PRIO STATE  TICKS FG NAME", MAX_BUFF, GREEN);
+	printsColor("\nPID   PRIO STATE  TICKS FG        SP                BP                NAME", MAX_BUFF, GREEN);
 	prints("\n", MAX_BUFF);
 	for (int i = 0; i < count; i++)
 	{
 		const char *state = state_to_string(info[i].state);
 		const char *fg = info[i].fg ? "FG" : "BG";
-		printf("PID %d PRIO %d STATE %s TICKS %d %s %s\n",
+		printf("PID %d PRIO %d STATE %s TICKS %d %s 0x%016llx 0x%016llx %s\n",
 		       info[i].pid,
 		       info[i].priority,
 		       state,
 		       info[i].ticks_left,
 		       fg,
+		       (unsigned long long)info[i].sp,
+		       (unsigned long long)info[i].bp,
 		       info[i].name);
 	}
 }
@@ -1283,6 +1371,38 @@ void cmd_yield()
 {
 	sys_yield();
 	prints("\nYield requested", MAX_BUFF);
+}
+
+void cmd_waitpid()
+{
+	int pid = -1;
+	int idx = 0;
+	char token[32];
+
+	if (parameter[0] != '\0')
+	{
+		if (!next_token(parameter, &idx, token, sizeof(token)))
+		{
+			printsColor("\nUsage: waitpid <pid|-1>", MAX_BUFF, RED);
+			return;
+		}
+
+		if (!parse_int_token(token, &pid))
+		{
+			printsColor("\nInvalid pid", MAX_BUFF, RED);
+			return;
+		}
+	}
+
+	int status = 0;
+	int64_t waited = sys_wait_pid(pid, &status);
+	if (waited < 0)
+	{
+		printsColor("\nwaitpid failed (no matching child)", MAX_BUFF, RED);
+		return;
+	}
+
+	printf("\nwaitpid -> child %d exited with status %d\n", (int)waited, status);
 }
 
 void cmd_cat()

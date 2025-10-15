@@ -22,6 +22,8 @@ typedef struct {
     int ticks_left;
     int fg;
     char name[32];
+    uint64_t sp;
+    uint64_t bp;
 } proc_info_t;
 
 /*
@@ -87,7 +89,7 @@ int64_t sys_nice(int pid, uint8_t new_priority);
 
 int64_t sys_yield();
 
-int64_t sys_wait_pid(int pid);
+int64_t sys_wait_pid(int pid, int *status);
 
 int64_t sys_exit(int code);
 

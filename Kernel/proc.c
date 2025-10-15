@@ -10,6 +10,12 @@ static pcb_t *proc_tail = NULL;
 static pcb_t *zombie_head = NULL;
 static int next_pid = 1;
 
+typedef struct wait_result {
+    int child_pid;
+    int exit_code;
+    struct wait_result *next;
+} wait_result_t;
+
 static pcb_t *allocate_slot(void);
 static void release_slot(pcb_t *proc);
 static void setup_stack(pcb_t *proc);
@@ -19,8 +25,15 @@ static void enqueue_zombie(pcb_t *proc);
 static void collect_zombies(void);
 static void copy_name(char *dst, const char *src, size_t max_len);
 static void trampoline(pcb_t *proc);
-static bool has_active_children(int parent_pid);
 static void notify_parent_exit(pcb_t *proc);
+static void link_child(pcb_t *parent, pcb_t *child);
+static void unlink_child(pcb_t *parent, pcb_t *child);
+static void push_wait_result(pcb_t *parent, int child_pid, int exit_code);
+static int consume_wait_result(pcb_t *parent, int target_pid, int *status);
+static pcb_t *find_child(pcb_t *parent, int child_pid);
+static bool parent_has_children(pcb_t *parent);
+static void cleanup_wait_results(pcb_t *proc);
+static void detach_children(pcb_t *parent);
 
 extern void _hlt(void);
 
@@ -59,10 +72,22 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     proc->argc = argc;
     proc->argv = argv;
     proc->exit_code = 0;
+    proc->waiting_for = 0;
+    proc->child_head = NULL;
+    proc->sibling_next = NULL;
+    proc->waiter_head = NULL;
+    proc->wait_res_head = NULL;
+    proc->wait_res_tail = NULL;
+    proc->pending_exit_pid = -1;
+    proc->pending_exit_code = 0;
+    proc->pending_exit_valid = false;
+    proc->exited = false;
+    proc->zombie_reapable = false;
 
     pcb_t *parent = sched_current();
     if (parent != NULL) {
         proc->parent_pid = parent->pid;
+        link_child(parent, proc);
     }
 
     proc->kstack_base = (uint8_t *)mm_malloc(KSTACK_SIZE);
@@ -92,9 +117,13 @@ void proc_exit(int code) {
     proc->exit_code = code;
     proc->state = EXITED;
     proc->ticks_left = 0;
-
+    proc->exited = true;
+    proc->waiting_for = 0;
+    proc->waiter_head = NULL;
+    detach_children(proc);
     remove_proc(proc);
     notify_parent_exit(proc);
+    cleanup_wait_results(proc);
     enqueue_zombie(proc);
 
     sched_force_yield();
@@ -201,10 +230,17 @@ int proc_kill(int pid) {
         return 0;
     }
 
+    target->exit_code = 0;
     target->state = EXITED;
     target->ticks_left = 0;
+    target->exited = true;
+    target->waiting_for = 0;
+    target->waiter_head = NULL;
+    target->pending_exit_valid = false;
+    detach_children(target);
     remove_proc(target);
     notify_parent_exit(target);
+    cleanup_wait_results(target);
     enqueue_zombie(target);
     collect_zombies();
 
@@ -240,6 +276,13 @@ static void release_slot(pcb_t *proc) {
     if (proc == NULL) {
         return;
     }
+    cleanup_wait_results(proc);
+    proc->wait_res_head = NULL;
+    proc->wait_res_tail = NULL;
+    proc->pending_exit_valid = false;
+    proc->child_head = NULL;
+    proc->sibling_next = NULL;
+    proc->waiter_head = NULL;
     proc->used = false;
 }
 
@@ -305,20 +348,26 @@ static void enqueue_zombie(pcb_t *proc) {
 
 static void collect_zombies(void) {
     pcb_t *cursor = zombie_head;
-    zombie_head = NULL;
+    pcb_t *pending = NULL;
 
     while (cursor != NULL) {
         pcb_t *next = cursor->cleanup_next;
         cursor->cleanup_next = NULL;
 
-        if (cursor->kstack_base != NULL) {
-            mm_free(cursor->kstack_base);
-            cursor->kstack_base = NULL;
+        if (cursor->zombie_reapable || cursor->parent_pid < 0) {
+            if (cursor->kstack_base != NULL) {
+                mm_free(cursor->kstack_base);
+                cursor->kstack_base = NULL;
+            }
+            cleanup_wait_results(cursor);
+            release_slot(cursor);
+        } else {
+            cursor->cleanup_next = pending;
+            pending = cursor;
         }
-
-        release_slot(cursor);
         cursor = next;
     }
+    zombie_head = pending;
 }
 
 static void copy_name(char *dst, const char *src, size_t max_len) {
@@ -345,18 +394,15 @@ static void trampoline(pcb_t *proc) {
     }
 }
 
-static bool has_active_children(int parent_pid) {
-    for (int i = 0; i < MAX_PROCS; i++) {
-        if (procs[i].used && procs[i].parent_pid == parent_pid &&
-            procs[i].state != EXITED) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void notify_parent_exit(pcb_t *proc) {
-    if (proc == NULL || proc->parent_pid < 0) {
+    if (proc == NULL) {
+        return;
+    }
+
+    proc->zombie_reapable = true;
+    proc->waiter_head = NULL;
+
+    if (proc->parent_pid < 0) {
         return;
     }
 
@@ -365,9 +411,104 @@ static void notify_parent_exit(pcb_t *proc) {
         return;
     }
 
-    if (!has_active_children(parent->pid) && parent->state == BLOCKED) {
+    unlink_child(parent, proc);
+    push_wait_result(parent, proc->pid, proc->exit_code);
+    proc->parent_pid = -1;
+
+    if (parent->state == BLOCKED &&
+        (parent->waiting_for == proc->pid || parent->waiting_for == -1)) {
+        parent->waiting_for = 0;
         proc_unblock(parent->pid);
     }
+}
+
+int proc_wait(int target_pid, int *status) {
+    collect_zombies();
+
+    pcb_t *parent = sched_current();
+    if (parent == NULL) {
+        return -1;
+    }
+
+    if (target_pid == 0) {
+        target_pid = -1;
+    }
+
+    int exit_status = 0;
+    int waited_pid = consume_wait_result(parent, target_pid, &exit_status);
+    if (waited_pid > 0) {
+        if (status != NULL) {
+            *status = exit_status;
+        }
+        return waited_pid;
+    }
+
+    pcb_t *target_child = NULL;
+
+    if (target_pid > 0) {
+        pcb_t *child = find_child(parent, target_pid);
+        if (child == NULL) {
+            if (parent->pending_exit_valid &&
+                parent->pending_exit_pid == target_pid) {
+                waited_pid = parent->pending_exit_pid;
+                exit_status = parent->pending_exit_code;
+                parent->pending_exit_valid = false;
+                if (status != NULL) {
+                    *status = exit_status;
+                }
+                return waited_pid;
+            }
+            return -1;
+        }
+        child->waiter_head = parent;
+        target_child = child;
+    } else {
+        if (!parent_has_children(parent)) {
+            if (parent->pending_exit_valid) {
+                waited_pid = parent->pending_exit_pid;
+                exit_status = parent->pending_exit_code;
+                parent->pending_exit_valid = false;
+                if (status != NULL) {
+                    *status = exit_status;
+                }
+                return waited_pid;
+            }
+            return -1;
+        }
+    }
+
+    parent->waiting_for = target_pid;
+    parent->state = BLOCKED;
+    parent->ticks_left = 0;
+    sched_force_yield();
+
+    collect_zombies();
+
+    waited_pid = consume_wait_result(parent, target_pid, &exit_status);
+    parent->waiting_for = 0;
+    if (target_child != NULL) {
+        target_child->waiter_head = NULL;
+    }
+
+    if (waited_pid > 0) {
+        if (status != NULL) {
+            *status = exit_status;
+        }
+        return waited_pid;
+    }
+
+    if (parent->pending_exit_valid &&
+        (target_pid <= 0 || parent->pending_exit_pid == target_pid)) {
+        waited_pid = parent->pending_exit_pid;
+        exit_status = parent->pending_exit_code;
+        parent->pending_exit_valid = false;
+        if (status != NULL) {
+            *status = exit_status;
+        }
+        return waited_pid;
+    }
+
+    return -1;
 }
 
 int proc_snapshot(proc_info_t *out, int max_items) {
@@ -390,8 +531,184 @@ int proc_snapshot(proc_info_t *out, int max_items) {
         info->ticks_left = procs[i].ticks_left;
         info->fg = procs[i].fg;
         copy_name(info->name, procs[i].name, sizeof(info->name));
+        info->sp = 0;
+        info->bp = 0;
+        if (procs[i].kframe != NULL) {
+            info->sp = procs[i].kframe->rsp;
+            info->bp = procs[i].kframe->rbp;
+        }
         count++;
     }
 
     return count;
+}
+
+static void link_child(pcb_t *parent, pcb_t *child) {
+    if (parent == NULL || child == NULL) {
+        return;
+    }
+    child->sibling_next = parent->child_head;
+    parent->child_head = child;
+}
+
+static void unlink_child(pcb_t *parent, pcb_t *child) {
+    if (parent == NULL || child == NULL) {
+        return;
+    }
+
+    pcb_t *prev = NULL;
+    pcb_t *cursor = parent->child_head;
+    while (cursor != NULL) {
+        if (cursor == child) {
+            if (prev == NULL) {
+                parent->child_head = cursor->sibling_next;
+            } else {
+                prev->sibling_next = cursor->sibling_next;
+            }
+            child->sibling_next = NULL;
+            return;
+        }
+        prev = cursor;
+        cursor = cursor->sibling_next;
+    }
+}
+
+static pcb_t *find_child(pcb_t *parent, int child_pid) {
+    if (parent == NULL || child_pid <= 0) {
+        return NULL;
+    }
+
+    pcb_t *cursor = parent->child_head;
+    while (cursor != NULL) {
+        if (cursor->pid == child_pid) {
+            return cursor;
+        }
+        cursor = cursor->sibling_next;
+    }
+    return NULL;
+}
+
+static bool parent_has_children(pcb_t *parent) {
+    return parent != NULL && parent->child_head != NULL;
+}
+
+static void push_wait_result(pcb_t *parent, int child_pid, int exit_code) {
+    if (parent == NULL) {
+        return;
+    }
+
+    wait_result_t *node = (wait_result_t *)mm_malloc(sizeof(wait_result_t));
+    if (node == NULL) {
+        parent->pending_exit_pid = child_pid;
+        parent->pending_exit_code = exit_code;
+        parent->pending_exit_valid = true;
+        return;
+    }
+
+    node->child_pid = child_pid;
+    node->exit_code = exit_code;
+    node->next = NULL;
+
+    if (parent->wait_res_tail == NULL) {
+        parent->wait_res_head = parent->wait_res_tail = node;
+    } else {
+        parent->wait_res_tail->next = node;
+        parent->wait_res_tail = node;
+    }
+}
+
+static int consume_wait_result(pcb_t *parent, int target_pid, int *status) {
+    if (parent == NULL) {
+        return -1;
+    }
+
+    wait_result_t *prev = NULL;
+    wait_result_t *node = parent->wait_res_head;
+
+    if (target_pid <= 0) {
+        if (node != NULL) {
+            parent->wait_res_head = node->next;
+            if (parent->wait_res_tail == node) {
+                parent->wait_res_tail = NULL;
+            }
+            int pid = node->child_pid;
+            if (status != NULL) {
+                *status = node->exit_code;
+            }
+            mm_free(node);
+            return pid;
+        }
+    } else {
+        while (node != NULL && node->child_pid != target_pid) {
+            prev = node;
+            node = node->next;
+        }
+        if (node != NULL) {
+            if (prev == NULL) {
+                parent->wait_res_head = node->next;
+            } else {
+                prev->next = node->next;
+            }
+            if (parent->wait_res_tail == node) {
+                parent->wait_res_tail = prev;
+            }
+            int pid = node->child_pid;
+            if (status != NULL) {
+                *status = node->exit_code;
+            }
+            mm_free(node);
+            return pid;
+        }
+    }
+
+    if (parent->pending_exit_valid &&
+        (target_pid <= 0 || parent->pending_exit_pid == target_pid)) {
+        int pid = parent->pending_exit_pid;
+        if (status != NULL) {
+            *status = parent->pending_exit_code;
+        }
+        parent->pending_exit_valid = false;
+        return pid;
+    }
+
+    return -1;
+}
+
+static void cleanup_wait_results(pcb_t *proc) {
+    if (proc == NULL) {
+        return;
+    }
+
+    wait_result_t *node = proc->wait_res_head;
+    while (node != NULL) {
+        wait_result_t *next = node->next;
+        mm_free(node);
+        node = next;
+    }
+    proc->wait_res_head = NULL;
+    proc->wait_res_tail = NULL;
+    proc->pending_exit_valid = false;
+    proc->pending_exit_pid = -1;
+    proc->pending_exit_code = 0;
+}
+
+static void detach_children(pcb_t *parent) {
+    if (parent == NULL) {
+        return;
+    }
+
+    pcb_t *child = parent->child_head;
+    parent->child_head = NULL;
+
+    while (child != NULL) {
+        pcb_t *next = child->sibling_next;
+        child->sibling_next = NULL;
+        if (child->parent_pid == parent->pid) {
+            child->parent_pid = -1;
+        }
+        if (child->waiter_head == parent) {
+            child->waiter_head = NULL;
+        }
+        child = next;
+    }
 }

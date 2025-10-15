@@ -35,6 +35,7 @@ void printPrompt();
 void cmd_eliminator();
 void cmd_test_mm();
 void cmd_test_processes();
+void cmd_test_priority();
 void cmd_test_sync();
 void cmd_test_no_synchro();
 void cmd_test_synchro();
@@ -44,6 +45,7 @@ void cmd_loop();
 void cmd_nice();
 void cmd_kill();
 void cmd_yield();
+void cmd_waitpid();
 void historyCaller(int direction);
 void handleSpecialCommands(char c);
 

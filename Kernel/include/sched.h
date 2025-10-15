@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct wait_result;
+
 typedef enum {
     NEW,
     READY,
@@ -63,6 +65,17 @@ typedef struct pcb_t {
     char **argv;
     int exit_code;
     bool used;
+    int waiting_for;
+    struct pcb_t *child_head;
+    struct pcb_t *sibling_next;
+    struct pcb_t *waiter_head;
+    struct wait_result *wait_res_head;
+    struct wait_result *wait_res_tail;
+    int pending_exit_pid;
+    int pending_exit_code;
+    bool pending_exit_valid;
+    bool exited;
+    bool zombie_reapable;
 } pcb_t;
 
 typedef struct proc_info_t {
@@ -72,6 +85,8 @@ typedef struct proc_info_t {
     int ticks_left;
     bool fg;
     char name[32];
+    uint64_t sp;
+    uint64_t bp;
 } proc_info_t;
 
 extern pcb_t *current;
@@ -88,6 +103,7 @@ int      proc_unblock(int pid);
 void     proc_nice(int pid, int new_prio);
 int      proc_kill(int pid);
 int      proc_snapshot(proc_info_t *out, int max_items);
+int      proc_wait(int pid, int *status);
 
 pcb_t   *proc_by_pid(int pid);
 pcb_t   *sched_get_idle(void);
