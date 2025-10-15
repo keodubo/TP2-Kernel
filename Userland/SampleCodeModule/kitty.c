@@ -216,7 +216,6 @@ char parameter[MAX_BUFF + 1] = {0};
 char command[MAX_BUFF + 1] = {0};
 int terminate = 0;
 int linePos = 0;
-char lastc;
 static char username[USERNAME_SIZE] = "user";
 static char commandHistory[MAX_COMMAND][MAX_BUFF] = {0};
 static int commandIterator = 0;
@@ -352,10 +351,9 @@ void printLine(char c)
 {
 	if (c == 0)
 	{
-		lastc = c;
 		return;
 	}
-	if (linePos >= MAX_BUFF || c == lastc)
+	if (linePos >= MAX_BUFF)
 	{
 		return;
 	}
@@ -372,7 +370,6 @@ void printLine(char c)
 	{
 		newLine();
 	}
-	lastc = c;
 }
 
 // Detecta si hay pipe '|' en la línea
