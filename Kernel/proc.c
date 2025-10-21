@@ -263,6 +263,15 @@ pcb_t *proc_by_pid(int pid) {
     return NULL;
 }
 
+int proc_get_foreground_pid(void) {
+    for (int i = 0; i < MAX_PROCS; i++) {
+        if (procs[i].used && procs[i].fg && procs[i].state != EXITED) {
+            return procs[i].pid;
+        }
+    }
+    return -1;
+}
+
 static pcb_t *allocate_slot(void) {
     for (int i = 0; i < MAX_PROCS; i++) {
         if (!procs[i].used) {
@@ -464,6 +473,14 @@ int proc_wait(int target_pid, int *status) {
         }
         child->waiter_head = parent;
         target_child = child;
+        
+        // Marcar el proceso hijo como foreground cuando se empieza a esperar
+        // Y marcar el padre como NO foreground (está bloqueado esperando)
+        child->fg = true;
+        parent->fg = false;
+        
+        // DEBUG: Verificar que se marcó correctamente
+        // (Este mensaje solo aparecerá si hay una función de print disponible)
     } else {
         if (!parent_has_children(parent)) {
             if (parent->pending_exit_valid) {
@@ -488,8 +505,13 @@ int proc_wait(int target_pid, int *status) {
 
     waited_pid = consume_wait_result(parent, target_pid, &exit_status);
     parent->waiting_for = 0;
+    
+    // Restaurar el padre como foreground después del wait
+    parent->fg = true;
+    
     if (target_child != NULL) {
         target_child->waiter_head = NULL;
+        target_child->fg = false;  // Limpiar fg del hijo
     }
 
     if (waited_pid > 0) {

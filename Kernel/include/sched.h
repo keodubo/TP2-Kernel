@@ -102,6 +102,7 @@ int      proc_block(int pid);
 int      proc_unblock(int pid);
 void     proc_nice(int pid, int new_prio);
 int      proc_kill(int pid);
+int      proc_get_foreground_pid(void);
 int      proc_snapshot(proc_info_t *out, int max_items);
 int      proc_wait(int pid, int *status);
 

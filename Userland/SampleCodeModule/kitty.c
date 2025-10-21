@@ -313,6 +313,10 @@ void printHelp()
 	printsColor("\n>debug [on|off]     - toggle debug logging", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n\n", MAX_BUFF, WHITE);
+	printsColor("Signal handling:\n", MAX_BUFF, GREEN);
+	printsColor("  Ctrl+C - Interrupt foreground process (sends SIGINT)\n", MAX_BUFF, CYAN);
+	printsColor("           Shell waits for process → Ctrl+C kills it\n", MAX_BUFF, CYAN);
+	printsColor("           When idle, Ctrl+C does nothing (shell stays alive)\n\n", MAX_BUFF, CYAN);
 	printsColor("Examples:\n", MAX_BUFF, GREEN);
     printsColor("  test_mm 50000000       - test memory manager with 50MB\n", MAX_BUFF, WHITE);
     printsColor("  test_processes 5       - test with 5 processes\n", MAX_BUFF, WHITE);
@@ -903,6 +907,20 @@ void cmd_test_mm()
 		printsColor("CREATED 'test_mm' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		printsColor("Press Ctrl+C to stop if needed\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Esperar a que termine (automáticamente en foreground)
+		int status = 0;
+		sys_wait_pid(pid, &status);
+		printsColor("[test_mm finished]\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Limpiar buffer de línea y mostrar prompt
+		for (int i = 0; i < MAX_BUFF; i++) {
+			line[i] = 0;
+			command[i] = 0;
+			parameter[i] = 0;
+		}
+		linePos = 0;
+		printPrompt();
 	}
 }
 
@@ -951,6 +969,20 @@ void cmd_test_processes()
 	} else {
 		printsColor("CREATED 'test_processes' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
+		
+		// Esperar a que termine (automáticamente en foreground)
+		int status = 0;
+		sys_wait_pid(pid, &status);
+		printsColor("[test_processes finished]\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Limpiar buffer de línea y mostrar prompt
+		for (int i = 0; i < MAX_BUFF; i++) {
+			line[i] = 0;
+			command[i] = 0;
+			parameter[i] = 0;
+		}
+		linePos = 0;
+		printPrompt();
 	}
 }
 
@@ -1000,6 +1032,20 @@ void cmd_test_priority()
 		printsColor("CREATED 'test_priority' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		printsColor("Observe the counters to compare priorities.\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Esperar a que termine (automáticamente en foreground)
+		int status = 0;
+		sys_wait_pid(pid, &status);
+		printsColor("[test_priority finished]\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Limpiar buffer de línea y mostrar prompt
+		for (int i = 0; i < MAX_BUFF; i++) {
+			line[i] = 0;
+			command[i] = 0;
+			parameter[i] = 0;
+		}
+		linePos = 0;
+		printPrompt();
 	}
 }
 
@@ -1053,6 +1099,20 @@ void cmd_test_no_synchro()
 	} else {
 		printsColor("CREATED 'test_no_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
+		
+		// Esperar a que termine (automáticamente en foreground)
+		int status = 0;
+		sys_wait_pid(pid, &status);
+		printsColor("[test_no_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Limpiar buffer de línea y mostrar prompt
+		for (int i = 0; i < MAX_BUFF; i++) {
+			line[i] = 0;
+			command[i] = 0;
+			parameter[i] = 0;
+		}
+		linePos = 0;
+		printPrompt();
 	}
 }
 
@@ -1133,6 +1193,20 @@ void cmd_test_synchro()
 	} else {
 		printsColor("CREATED 'test_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
+		
+		// Esperar a que termine (automáticamente en foreground)
+		int status = 0;
+		sys_wait_pid(pid, &status);
+		printsColor("[test_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Limpiar buffer de línea y mostrar prompt
+		for (int i = 0; i < MAX_BUFF; i++) {
+			line[i] = 0;
+			command[i] = 0;
+			parameter[i] = 0;
+		}
+		linePos = 0;
+		printPrompt();
 	}
 }
 
@@ -1295,6 +1369,20 @@ void cmd_loop()
 		return;
 	}
 	printf("\nSpawned %s (pid %d, prio %d)\n", name, pid, prio);
+	
+	// Esperar a que el proceso termine (automáticamente en foreground)
+	int status = 0;
+	sys_wait_pid(pid, &status);
+	printf("[loop %d terminated]\n", pid);
+	
+	// Limpiar buffer de línea y mostrar prompt
+	for (int i = 0; i < MAX_BUFF; i++) {
+		line[i] = 0;
+		command[i] = 0;
+		parameter[i] = 0;
+	}
+	linePos = 0;
+	printPrompt();
 }
 
 void cmd_nice()

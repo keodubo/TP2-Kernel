@@ -163,6 +163,41 @@ void tty_push_char(tty_t *t, char c) {
 
     uint64_t flags = irq_save_local();
 
+    // Manejar Ctrl+C (ETX = 0x03)
+    if (c == 3) {
+        irq_restore_local(flags);
+        
+        // Obtener el proceso en foreground y matarlo
+        int fg_pid = proc_get_foreground_pid();
+        
+        // DEBUG: Imprimir información
+        char debug_msg[64];
+        const char *sigint_msg = "^C\n";
+        tty_write(t, sigint_msg, 3);
+        
+        if (fg_pid > 0) {
+            // Formatear mensaje de debug
+            int len = 0;
+            const char *prefix = "[DEBUG] Killing FG process: ";
+            for (int i = 0; prefix[i] != '\0'; i++) {
+                debug_msg[len++] = prefix[i];
+            }
+            // Convertir PID a string simple
+            if (fg_pid >= 10) {
+                debug_msg[len++] = '0' + (fg_pid / 10);
+            }
+            debug_msg[len++] = '0' + (fg_pid % 10);
+            debug_msg[len++] = '\n';
+            tty_write(t, debug_msg, len);
+            
+            proc_kill(fg_pid);
+        } else {
+            const char *no_fg_msg = "[DEBUG] No FG process to kill\n";
+            tty_write(t, no_fg_msg, 29);
+        }
+        return;
+    }
+
     if (c == 4) {
         t->eof = true;
         pcb_t *proc = dequeue_waiter(t);
