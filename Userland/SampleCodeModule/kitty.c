@@ -15,7 +15,7 @@
 // Declaraciones de las funciones de test
 uint64_t test_mm(uint64_t argc, char *argv[]);
 uint64_t test_processes(uint64_t argc, char *argv[]);
-uint64_t test_priority(uint64_t argc, char *argv[]);
+uint64_t test_prio(uint64_t argc, char *argv[]);
 uint64_t test_sync(uint64_t argc, char *argv[]);
 uint64_t test_no_synchro(uint64_t argc, char *argv[]);
 uint64_t test_synchro(uint64_t argc, char *argv[]);
@@ -170,8 +170,8 @@ void test_priority_process(int argc, char **argv) {
 	free_spawn_args(argv, argc);
 
 	char *args[2] = {arg_buffer, NULL};
-	printf("[test_priority_process] Calling test_priority...\n");
-	test_priority(1, args);
+	printf("[test_priority_process] Calling test_prio...\n");
+	test_prio(1, args);
 	printf("[test_priority_process] Finished\n");
 	sys_exit(0);
 }

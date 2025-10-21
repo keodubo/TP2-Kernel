@@ -2,105 +2,94 @@
 #include <stdio.h>
 #include "syscall.h"
 #include "test_util.h"
-#include "../include/sys_calls.h"
 
-#define WORKER_COUNT 3
+#define TOTAL_PROCESSES 3
 
-static volatile int running = 0;
-static volatile uint64_t counters[WORKER_COUNT];
+// Priority mapping for TP2 kernel (from Kernel/include/sched.h):
+// MIN_PRIO=0, HIGHEST_PRIO=3 (MAX_PRIOS-1), DEFAULT_PRIO=2
+// Lower numeric value = lower priority, higher numeric = higher priority
+#define LOWEST   0  // Lowest priority
+#define MEDIUM   2  // Medium priority (default)
+#define HIGHEST  3  // Highest priority
 
-static void reset_counters(void) {
-  for (int i = 0; i < WORKER_COUNT; i++) {
-    counters[i] = 0;
-  }
+int64_t prio[TOTAL_PROCESSES] = {LOWEST, MEDIUM, HIGHEST};
+
+// Recommended max_value >= 50000000 to observe priority effects clearly.
+// Adjust if quantum/ticks are very short or processes finish simultaneously.
+uint64_t max_value = 0;
+
+void zero_to_max() {
+  uint64_t value = 0;
+
+  while (value++ != max_value);
+
+  printf("PROCESS %ld DONE!\n", (long)my_getpid());
 }
 
-uint64_t priority_worker(uint64_t argc, char *argv[]) {
-  int idx = 0;
-  if (argc >= 1 && argv != NULL && argv[0] != NULL) {
-    idx = satoi(argv[0]);
-  }
-  if (idx < 0 || idx >= WORKER_COUNT) {
-    return (uint64_t)-1;
-  }
+uint64_t test_prio(uint64_t argc, char *argv[]) {
+  int64_t pids[TOTAL_PROCESSES];
+  char *ztm_argv[] = {0};
+  uint64_t i;
 
-  while (running) {
-    counters[idx]++;
-    if ((counters[idx] & 0xFF) == 0) {
-      __asm__ __volatile__("pause");
-    }
-  }
+  // Validate arguments: argc must be 1 (max_value parameter)
+  if (argc != 1)
+    return -1;
 
-  return counters[idx];
-}
+  if ((max_value = satoi(argv[0])) <= 0)
+    return -1;
 
-static void wait_processes(const int64_t pids[WORKER_COUNT], int exits[WORKER_COUNT]) {
-  for (int i = 0; i < WORKER_COUNT; i++) {
-    exits[i] = 0;
-    if (pids[i] > 0) {
-      my_wait_pid((int64_t)pids[i], &exits[i]);
-    }
-  }
-}
+  printf("SAME PRIORITY...\n");
 
-static void run_phase(const char *label, const uint8_t prios[WORKER_COUNT], uint64_t duration_ms) {
-  char *args0[] = {"0", NULL};
-  char *args1[] = {"1", NULL};
-  char *args2[] = {"2", NULL};
-  char **worker_args[WORKER_COUNT] = {args0, args1, args2};
-
-  int64_t pids[WORKER_COUNT] = {0};
-  int exits[WORKER_COUNT] = {0};
-
-  reset_counters();
-  running = 1;
-
-  for (int i = 0; i < WORKER_COUNT; i++) {
-    pids[i] = my_create_process("priority_worker", 1, worker_args[i]);
+  for (i = 0; i < TOTAL_PROCESSES; i++) {
+    pids[i] = my_create_process("zero_to_max", 0, ztm_argv);
     if (pids[i] < 0) {
-      printf("test_priority: ERROR creating worker %d\n", i);
-      running = 0;
-      wait_processes(pids, exits);
-      return;
+      printf("ERROR: failed to create process\n");
+      return -1;
     }
   }
 
-  if (prios != NULL) {
-    for (int i = 0; i < WORKER_COUNT; i++) {
-      my_nice(pids[i], prios[i]);
+  // Expect to see them finish at the same time
+
+  for (i = 0; i < TOTAL_PROCESSES; i++)
+    my_wait(pids[i]);
+
+  printf("SAME PRIORITY, THEN CHANGE IT...\n");
+
+  for (i = 0; i < TOTAL_PROCESSES; i++) {
+    pids[i] = my_create_process("zero_to_max", 0, ztm_argv);
+    if (pids[i] < 0) {
+      printf("ERROR: failed to create process\n");
+      return -1;
     }
+    my_nice(pids[i], prio[i]);
+    printf("  PROCESS %ld NEW PRIORITY: %ld\n", (long)pids[i], (long)prio[i]);
   }
 
-  sys_wait(duration_ms);
-  running = 0;
-  sys_wait(50);
+  // Expect the priorities to take effect
 
-  wait_processes(pids, exits);
+  for (i = 0; i < TOTAL_PROCESSES; i++)
+    my_wait(pids[i]);
 
-  printf("[test_priority] %s\n", label);
-  for (int i = 0; i < WORKER_COUNT; i++) {
-    printf("  worker %d -> counter=%llu exit=%d prio=%u\n",
-           i, (unsigned long long)counters[i], exits[i],
-           (prios != NULL) ? prios[i] : DEFAULT_PRIORITY);
-  }
-}
+  printf("SAME PRIORITY, THEN CHANGE IT WHILE BLOCKED...\n");
 
-uint64_t test_priority(uint64_t argc, char *argv[]) {
-  uint64_t duration = 1500;
-  if (argc >= 1 && argv != NULL && argv[0] != NULL) {
-    uint64_t parsed = satoi(argv[0]);
-    if (parsed > 0) {
-      duration = parsed;
+  for (i = 0; i < TOTAL_PROCESSES; i++) {
+    pids[i] = my_create_process("zero_to_max", 0, ztm_argv);
+    if (pids[i] < 0) {
+      printf("ERROR: failed to create process\n");
+      return -1;
     }
+    my_block(pids[i]);
+    my_nice(pids[i], prio[i]);
+    printf("  PROCESS %ld NEW PRIORITY: %ld\n", (long)pids[i], (long)prio[i]);
   }
 
-  printf("\n[test_priority] Running with sample window %u ms\n", (unsigned int)duration);
+  for (i = 0; i < TOTAL_PROCESSES; i++)
+    my_unblock(pids[i]);
 
-  uint8_t same_prio[WORKER_COUNT] = {DEFAULT_PRIORITY, DEFAULT_PRIORITY, DEFAULT_PRIORITY};
-  run_phase("Phase 1 - prioridades iguales", same_prio, duration);
+  // Expect the priorities to take effect
 
-  uint8_t mixed_prio[WORKER_COUNT] = {MAX_PRIORITY, DEFAULT_PRIORITY, MIN_PRIORITY};
-  run_phase("Phase 2 - prioridades distintas (alto/medio/bajo)", mixed_prio, duration);
+  for (i = 0; i < TOTAL_PROCESSES; i++)
+    my_wait(pids[i]);
 
   return 0;
 }
