@@ -39,6 +39,11 @@ void clearBSS(void * bssAddress, uint64_t bssSize)
 	memset(bssAddress, 0, bssSize);
 }
 
+// Archivo: kernel.c
+// Propósito: Punto de entrada y bootstrap del kernel
+// Resumen: Inicializa subsistemas (IDT, drivers, mm, sched) y carga/arranca
+//          módulos de userland.
+
 void * getStackBase()
 {
 	return (void*)(

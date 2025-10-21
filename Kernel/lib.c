@@ -1,5 +1,10 @@
 #include <stdint.h>
 
+// Archivo: lib.c
+// Propósito: Implementaciones básicas de utilidades de memoria (memcpy/memset)
+// Resumen: Proporciona versiones simples y eficientes de memset y memcpy
+//          utilizadas por el kernel; memcpy asume buffers no solapados.
+
 void * memset(void * destination, int32_t c, uint64_t length)
 {
 	uint8_t chr = (uint8_t)c;

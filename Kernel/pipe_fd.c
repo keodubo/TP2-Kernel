@@ -33,3 +33,8 @@ const struct fd_ops PIPE_OPS = {
     .write = fd_pipe_write,
     .close = fd_pipe_close
 };
+
+// Archivo: pipe_fd.c
+// Propósito: Adaptadores entre el subsistema de pipes y la interfaz de FDs
+// Resumen: Implementa read/write/close para exponer pipes mediante file
+//          descriptors al resto del kernel y userland.

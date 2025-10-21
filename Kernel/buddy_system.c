@@ -16,6 +16,11 @@ static void* region_end = NULL;                    // Fin de la region administr
 static unsigned max_order = 0;                     // Orden maximo segun el tamaño del heap
 static int initialized = 0;
 
+// Archivo: buddy_system.c
+// Propósito: Implementación del allocador Buddy System
+// Resumen: Mantiene listas por orden, mapas de uso y funciones para
+//          alloc/free/merge usando la técnica buddy.
+
 // Estadisticas
 static uint64_t stat_total = 0;
 static uint64_t stat_used = 0;

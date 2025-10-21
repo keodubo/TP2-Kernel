@@ -1,4 +1,3 @@
-// Gestor simple de file descriptors compartido entre kernel y userland
 #include <stddef.h>
 #include "include/fd.h"
 #include "include/lib.h"
@@ -6,6 +5,12 @@
 #include "include/pipe.h"
 #include "include/interrupts.h"
 
+// Archivo: fd.c
+// Propósito: Gestor simple de file descriptors compartido entre kernel y userland
+// Resumen: Tabla global de FDs, adaptadores para TTY y pipes, y helpers para
+//          operaciones de lectura/escritura/cierre.
+
+// Gestor simple de file descriptors compartido entre kernel y userland
 // Tabla global simple de FDs
 // TODO: migrar a per-process cuando se implemente gestión completa de procesos
 static kfd_t fd_table[FD_MAX];

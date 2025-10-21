@@ -2,6 +2,13 @@
 #include "include/memory_manager.h"
 #include "include/lib.h"
 
+// Archivo: proc.c
+// Propósito: Gestión de procesos (PCB), creación, destrucción, comunicación
+// Resumen: Implementa la tabla de procesos, creación de procesos, manejo de
+//          zombis, espera y notificaciones entre procesos. Incluye utilidades
+//          para la gestión del stack de usuario y trampolines.
+
+
 #define KSTACK_SIZE (16 * 1024)
 
 static pcb_t procs[MAX_PROCS];

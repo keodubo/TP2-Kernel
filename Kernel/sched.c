@@ -1,5 +1,10 @@
 #include "include/sched.h"
 
+// Archivo: sched.c
+// Propósito: Implementación del planificador de procesos del kernel
+// Resumen: Colas por prioridad, selección del siguiente proceso, manejo
+//          del proceso idle y API para encolar/desencolar procesos.
+
 static pcb_t *ready_head[MAX_PRIOS];
 static pcb_t *ready_tail[MAX_PRIOS];
 static bool scheduler_enabled = false;

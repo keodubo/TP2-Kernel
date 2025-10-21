@@ -4,6 +4,11 @@
 #include <time.h>
 #include <userlib.h>
 
+// Archivo: userlib.c
+// Propósito: Librería de usuario con utilidades y wrappers a syscalls
+// Resumen: Define colores, conversiones y funciones auxiliares usadas por
+//          las aplicaciones de userland de ejemplo.
+
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2

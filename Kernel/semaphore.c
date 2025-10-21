@@ -17,6 +17,11 @@ static uint64_t irq_save(void);
 static void irq_restore(uint64_t flags);
 static void sem_free(ksem_t *sem);
 
+// Archivo: semaphore.c
+// Propósito: Implementación de semáforos en espacio kernel
+// Resumen: Tablas hash de semáforos nombrados, creación, apertura, espera
+//          y señalización con manejo de colas de procesos bloqueados.
+
 static uint32_t sem_hash(const char *name) {
     uint32_t hash = 5381;
     char c;

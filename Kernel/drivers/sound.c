@@ -2,6 +2,11 @@
 #include <time.h>
 #include <sound.h>
 
+// Archivo: sound.c
+// Propósito: Control básico del altavoz del PC (PIT/PC speaker)
+// Resumen: Lectura/escritura de puertos para generar tonos simples y
+//          funciones de conveniencia como beep().
+
 uint8_t spkIn(uint16_t port);
 void spkOut(uint16_t port, uint8_t value);
 

@@ -3,6 +3,11 @@
 #include <moduleLoader.h>
 #include <naiveConsole.h>
 
+// Archivo: moduleLoader.c
+// Propósito: Cargar módulos binarios empacados en la imagen del kernel
+// Resumen: Lee el payload de módulos (cantidad y tamaños) y copia cada
+//          módulo a la dirección objetivo indicada en memoria.
+
 #include <stdint.h>
 #include <lib.h>
 #include <moduleLoader.h>

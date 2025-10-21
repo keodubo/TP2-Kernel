@@ -1,6 +1,11 @@
 #include <stdint.h>
 #include <time.h>
 
+// Archivo: time.c
+// Propósito: Manejo básico de temporización del kernel
+// Resumen: Lleva el contador de ticks del sistema, implementación de sleep
+//          y utilidades para obtener tiempo transcurrido en ticks/ segundos.
+
 static unsigned long ticks = 0;
 extern int _hlt();
 int ellapsed = 0; // Used in sleep(), cleared by sleep(), incremented by timer_handler()

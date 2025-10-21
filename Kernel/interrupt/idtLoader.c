@@ -21,6 +21,12 @@ DESCR_INT *idt = (DESCR_INT *)0; // IDT de 255 entradas
 
 static void setup_IDT_entry(int index, uint64_t offset);
 
+// Archivo: idtLoader.c
+// Propósito: Construir y cargar la IDT (Interrupt Descriptor Table)
+// Resumen: Define estructuras empacadas para descriptores de interrupción,
+//          inicializa entradas de interrupción (IRQ, syscalls, exceptions)
+//          y carga la IDTR.
+
 void load_idt()
 {
   // Clear Interruptions

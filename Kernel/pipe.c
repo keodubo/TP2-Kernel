@@ -41,6 +41,11 @@ static int pipe_name_cmp(const char *a, const char *b) {
     return (int)(unsigned char)(*a) - (int)(unsigned char)(*b);
 }
 
+// Archivo: pipe.c
+// Propósito: Implementación de pipes nombrados con bloqueo en kernel
+// Resumen: Tabla hash de pipes, colas de readers/writers, y funciones para
+//          lectura/escritura/cierre y manejo de wakeups.
+
 static void pipe_name_copy(char *dst, const char *src) {
     uint32_t i = 0;
     for (; i < PIPE_NAME_MAX - 1 && src[i] != '\0'; i++) {

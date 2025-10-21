@@ -3,6 +3,11 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+// Archivo: stdio.c
+// Propósito: Implementaciones básicas de IO de userland (printf/itoa)
+// Resumen: Conversores numéricos y funciones para formatear/emitir texto
+//          desde procesos de userland hacia las syscalls de escritura.
+
 // Funcion auxiliar para convertir entero a string
 static void itoa(int64_t value, char *str, int base) {
     char *ptr = str;
