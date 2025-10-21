@@ -9,6 +9,7 @@
 #include <ascii.h>
 #include "../tests/test_util.h"
 #include "../tests/syscall.h"
+#include "sh/jobs.h"
 
 // Shell interactiva: parsea comandos, gestiona pipes y utilidades de tests
 
@@ -242,6 +243,7 @@ static char commandHistory[MAX_COMMAND][MAX_BUFF] = {0};
 static int commandIterator = 0;
 static int commandIdxMax = 0;
 static int loop_counter = 0;
+static int is_background = 0; // Flag para indicar si el comando se ejecuta en background
 
 char usernameLength = 4;
 
@@ -281,6 +283,7 @@ void cmd_cat(void);
 void cmd_wc(void);
 void cmd_filter(void);
 void cmd_echo(void);
+void cmd_jobs(void);
 
 void printHelp()
 {
@@ -295,6 +298,7 @@ void printHelp()
 	printsColor("\n>invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>jobs               - list background processes", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
     printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
@@ -317,12 +321,20 @@ void printHelp()
 	printsColor("  Ctrl+C - Interrupt foreground process (sends SIGINT)\n", MAX_BUFF, CYAN);
 	printsColor("           Shell waits for process → Ctrl+C kills it\n", MAX_BUFF, CYAN);
 	printsColor("           When idle, Ctrl+C does nothing (shell stays alive)\n\n", MAX_BUFF, CYAN);
+	printsColor("Background execution:\n", MAX_BUFF, GREEN);
+	printsColor("  cmd &  - Execute command in background (no wait)\n", MAX_BUFF, CYAN);
+	printsColor("           Shell returns immediately to prompt\n", MAX_BUFF, CYAN);
+	printsColor("           Background jobs don't get keyboard input\n", MAX_BUFF, CYAN);
+	printsColor("           Use 'jobs' to list running background processes\n\n", MAX_BUFF, CYAN);
 	printsColor("Examples:\n", MAX_BUFF, GREEN);
     printsColor("  test_mm 50000000       - test memory manager with 50MB\n", MAX_BUFF, WHITE);
     printsColor("  test_processes 5       - test with 5 processes\n", MAX_BUFF, WHITE);
     printsColor("  test_priority 2000     - priority round robin demo\n", MAX_BUFF, WHITE);
     printsColor("  test_synchro 10 1      - synchronized test with params\n", MAX_BUFF, WHITE);
 	printsColor("  loop -p 2              - spawn loop process with priority 2\n", MAX_BUFF, WHITE);
+	printsColor("  loop &                 - run loop in background\n", MAX_BUFF, WHITE);
+	printsColor("  loop -p 2 &            - run loop with prio 2 in background\n", MAX_BUFF, WHITE);
+	printsColor("  jobs                   - list all background jobs\n", MAX_BUFF, WHITE);
 	printsColor("  nice 3 1               - change process 3 priority to 1\n", MAX_BUFF, WHITE);
 	printsColor("\n", MAX_BUFF, WHITE);
 	printsColor("Pipe examples:\n", MAX_BUFF, GREEN);
@@ -332,7 +344,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -361,17 +373,22 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_cat,
 	cmd_wc,
 	cmd_filter,
-	cmd_echo
+	cmd_echo,
+	cmd_jobs
 };
 
 // Bucle principal de la shell: lee caracteres y procesa líneas completas
 void kitty()
 {
 	char c;
+	jobs_init();
 	printPrompt();
 
 	while (1 && !terminate)
 	{
+		// Recolectar zombies de procesos background
+		jobs_reap_background();
+		
 		drawCursor();
 		c = getChar();
 		printLine(c);
@@ -657,6 +674,28 @@ cleanup:
 // Ejecuta la línea actual (con o sin pipeline) y reinicia el prompt
 void newLine()
 {
+	// Detectar si hay '&' al final (background)
+	is_background = 0;
+	int effective_len = linePos;
+	
+	// Trim espacios al final
+	while (effective_len > 0 && line[effective_len - 1] == ' ') {
+		effective_len--;
+	}
+	
+	// Verificar si termina en '&'
+	if (effective_len > 0 && line[effective_len - 1] == '&') {
+		is_background = 1;
+		line[effective_len - 1] = '\0';  // Remover el '&'
+		linePos = effective_len - 1;
+		
+		// Trim espacios después de remover '&'
+		while (linePos > 0 && line[linePos - 1] == ' ') {
+			line[linePos - 1] = '\0';
+			linePos--;
+		}
+	}
+	
 	// Detectar si hay pipe
 	int pipe_pos = has_pipe(line);
 	
@@ -707,8 +746,14 @@ void newLine()
 	}
 	linePos = 0;
 
-	printc('\n');
-	printPrompt();
+	// Solo imprimir nueva línea y prompt si NO es background
+	// (en background, el comando ya imprimió el mensaje [bg] y prompt)
+	if (!is_background) {
+		printc('\n');
+		printPrompt();
+	}
+	// Resetear flag para siguiente comando
+	is_background = 0;
 }
 
 void printPrompt()
@@ -1291,11 +1336,20 @@ static int parse_int_token(const char *token, int *value) {
 }
 
 static void loop_process(int argc, char **argv) {
-	(void)argc;
-	(void)argv;
 	int pid = (int)sys_getpid();
+	int silent = 0;
+	
+	// Si se pasó argumento "silent", no imprimir
+	if (argc > 0 && argv != NULL && argv[0] != NULL) {
+		if (strcmp(argv[0], "silent") == 0) {
+			silent = 1;
+		}
+	}
+	
 	while (1) {
-		printf("[loop %d] .\n", pid);
+		if (!silent) {
+			printf("[loop %d] .\n", pid);
+		}
 		sys_wait(200);
 	}
 }
@@ -1362,27 +1416,59 @@ void cmd_loop()
 
 	char name[32];
 	sprintf(name, "loop-%d", loop_counter++);
-	int pid = sys_create_process(loop_process, 0, NULL, name, (uint8_t)prio);
+	
+	int pid;
+	if (is_background)
+	{
+		// Background: crear con argumento "silent" para suprimir output
+		char **args = (char**)sys_malloc(2 * sizeof(char*));
+		if (args != NULL) {
+			args[0] = (char*)sys_malloc(7);
+			if (args[0] != NULL) {
+				strcpy(args[0], "silent");
+			}
+			args[1] = NULL;
+			pid = sys_create_process(loop_process, 1, args, name, (uint8_t)prio);
+		} else {
+			pid = sys_create_process(loop_process, 0, NULL, name, (uint8_t)prio);
+		}
+	}
+	else
+	{
+		// Foreground: crear sin argumentos (output normal)
+		pid = sys_create_process(loop_process, 0, NULL, name, (uint8_t)prio);
+	}
+	
 	if (pid < 0)
 	{
 		printsColor("\nFailed to spawn loop", MAX_BUFF, RED);
 		return;
 	}
-	printf("\nSpawned %s (pid %d, prio %d)\n", name, pid, prio);
 	
-	// Esperar a que el proceso termine (automáticamente en foreground)
-	int status = 0;
-	sys_wait_pid(pid, &status);
-	printf("[loop %d terminated]\n", pid);
-	
-	// Limpiar buffer de línea y mostrar prompt
-	for (int i = 0; i < MAX_BUFF; i++) {
-		line[i] = 0;
-		command[i] = 0;
-		parameter[i] = 0;
+	if (is_background)
+	{
+		// Background: no wait, agregar a jobs
+		jobs_add(pid, name);
+		// Imprimir prompt inmediatamente para que el usuario pueda continuar
+		printPrompt();
 	}
-	linePos = 0;
-	printPrompt();
+	else
+	{
+		// Foreground: esperar a que termine
+		printf("\nSpawned %s (pid %d, prio %d)\n", name, pid, prio);
+		int status = 0;
+		sys_wait_pid(pid, &status);
+		printf("[loop %d terminated]\n", pid);
+		
+		// Limpiar buffer de línea y mostrar prompt
+		for (int i = 0; i < MAX_BUFF; i++) {
+			line[i] = 0;
+			command[i] = 0;
+			parameter[i] = 0;
+		}
+		linePos = 0;
+		printPrompt();
+	}
 }
 
 void cmd_nice()
@@ -1513,6 +1599,11 @@ void cmd_filter()
 void cmd_echo()
 {
 	echo_output(parameter, 1);
+}
+
+void cmd_jobs()
+{
+	jobs_list();
 }
 
 void historyCaller(int direction)
