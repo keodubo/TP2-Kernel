@@ -79,6 +79,9 @@ int64_t sys_getpid();
 
 int64_t sys_create_process(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority);
 
+// Nueva syscall para crear procesos con control de foreground/background
+int64_t sys_create_process_ex(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority, int is_fg);
+
 int64_t sys_kill(int pid);
 
 int64_t sys_block(int pid);

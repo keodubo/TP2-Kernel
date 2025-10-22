@@ -198,7 +198,14 @@ static uint64_t sys_mem_info(memory_info_t* info)
 
 static uint64_t sys_create_process(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority)
 {
-    return proc_create(entry_point, argc, argv, priority, false, name);
+    // Por compatibilidad: procesos creados sin especificar fg/bg se crean como foreground
+    return proc_create(entry_point, argc, argv, priority, true, name);
+}
+
+static uint64_t sys_create_process_ex(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority, int is_fg)
+{
+    // Nueva versión que permite especificar si es foreground o background
+    return proc_create(entry_point, argc, argv, priority, is_fg ? true : false, name);
 }
 
 static uint64_t sys_kill(int pid)
@@ -206,8 +213,10 @@ static uint64_t sys_kill(int pid)
     return proc_kill(pid);
 }
 
-uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t rax)
+uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8, uint64_t r9, uint64_t rax)
 {
+    // Nota: rcx contiene el valor de r10 desde userland (4to parámetro de syscalls)
+    uint64_t r10 = rcx;  // Renombrar para claridad en el código
     uint8_t r, g, b;
     Color color;
     switch (rax)
@@ -316,6 +325,8 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         return sys_close((int)rdi);
     case 44:
         return sys_dup2((int)rdi, (int)rsi);
+    case 45:
+        return sys_create_process_ex((void (*)(int, char**))rdi, (int)rsi, (char**)rdx, (const char*)r10, (uint8_t)r8, (int)r9);
     default:
         return 0;
     }

@@ -1,6 +1,7 @@
 #include "include/sched.h"
 #include "include/memory_manager.h"
 #include "include/lib.h"
+#include "include/tty.h"
 
 // Archivo: proc.c
 // Propósito: Gestión de procesos (PCB), creación, destrucción, comunicación
@@ -110,6 +111,11 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
 
     sched_enqueue(proc);
 
+    // Si el proceso se crea como foreground, actualizar la TTY
+    if (fg) {
+        tty_set_foreground(proc->pid);
+    }
+
     return proc->pid;
 }
 
@@ -121,6 +127,20 @@ void proc_exit(int code) {
 
     if (proc == NULL || proc == idle) {
         return;
+    }
+
+    // Si este proceso era el foreground, liberar la TTY
+    if (proc->fg) {
+        int parent_pid = proc->parent_pid;
+        pcb_t *parent = (parent_pid > 0) ? proc_by_pid(parent_pid) : NULL;
+        
+        // Devolver el control al padre (típicamente la shell)
+        if (parent != NULL && parent->state != EXITED) {
+            proc_set_foreground(parent_pid);
+        } else {
+            // Sin padre válido, liberar la TTY
+            tty_set_foreground(-1);
+        }
     }
 
     proc->exit_code = code;
@@ -232,6 +252,20 @@ int proc_kill(int pid) {
         return -1;
     }
 
+    // Si el proceso a matar es el foreground, liberar la TTY
+    if (target->fg) {
+        int parent_pid = target->parent_pid;
+        pcb_t *parent = (parent_pid > 0) ? proc_by_pid(parent_pid) : NULL;
+        
+        // Devolver el control al padre (típicamente la shell)
+        if (parent != NULL && parent->state != EXITED) {
+            proc_set_foreground(parent_pid);
+        } else {
+            // Sin padre válido, liberar la TTY
+            tty_set_foreground(-1);
+        }
+    }
+
     if (target->state == READY) {
         sched_remove(target);
     } else if (target == sched_current()) {
@@ -271,12 +305,43 @@ pcb_t *proc_by_pid(int pid) {
 }
 
 int proc_get_foreground_pid(void) {
+    // Primero consultar la TTY, que es la fuente de verdad
+    int tty_fg = tty_get_foreground();
+    if (tty_fg > 0) {
+        return tty_fg;
+    }
+    
+    // Fallback: buscar algún proceso marcado como fg
     for (int i = 0; i < MAX_PROCS; i++) {
         if (procs[i].used && procs[i].fg && procs[i].state != EXITED) {
             return procs[i].pid;
         }
     }
     return -1;
+}
+
+/**
+ * @brief Establece un proceso como foreground en la TTY
+ * @param pid PID del proceso a poner en foreground (-1 para ninguno)
+ */
+void proc_set_foreground(int pid) {
+    // Marcar el nuevo foreground
+    if (pid > 0) {
+        pcb_t *proc = proc_by_pid(pid);
+        if (proc != NULL) {
+            proc->fg = true;
+        }
+    }
+    
+    // Actualizar la TTY
+    tty_set_foreground(pid);
+    
+    // Desmarcar todos los demás procesos
+    for (int i = 0; i < MAX_PROCS; i++) {
+        if (procs[i].used && procs[i].pid != pid) {
+            procs[i].fg = false;
+        }
+    }
 }
 
 static pcb_t *allocate_slot(void) {

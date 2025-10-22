@@ -4,6 +4,8 @@
 #include "include/tty.h"
 #include "include/pipe.h"
 #include "include/interrupts.h"
+#include "include/errno.h"
+#include "include/sched.h"
 
 // Archivo: fd.c
 // Propósito: Gestor simple de file descriptors compartido entre kernel y userland
@@ -35,6 +37,18 @@ static int fd_tty_read(int fd, void *buf, int n) {
     if (f == NULL || !f->can_read || f->ptr == NULL) {
         return -1;
     }
+    
+    // Verificar si el proceso actual puede leer de la TTY (solo FG)
+    pcb_t *cur = sched_current();
+    if (cur == NULL) {
+        return -1;
+    }
+    
+    // Solo el proceso foreground puede leer de stdin
+    if (fd == FD_STDIN && !tty_can_read(cur->pid)) {
+        return E_BG_INPUT;
+    }
+    
     return tty_read((tty_t *)f->ptr, buf, n);
 }
 

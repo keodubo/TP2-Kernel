@@ -278,6 +278,7 @@ void cmd_loop(void);
 void cmd_nice(void);
 void cmd_kill(void);
 void cmd_yield(void);
+void cmd_shell(void);
 void cmd_waitpid(void);
 void cmd_cat(void);
 void cmd_wc(void);
@@ -299,6 +300,7 @@ void printHelp()
 	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>jobs               - list background processes", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>shell              - start new shell with FG/BG support (use '&' for background)", MAX_BUFF, LIGHT_GREEN);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
     printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
@@ -317,26 +319,11 @@ void printHelp()
 	printsColor("\n>debug [on|off]     - toggle debug logging", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n\n", MAX_BUFF, WHITE);
-	printsColor("Signal handling:\n", MAX_BUFF, GREEN);
-	printsColor("  Ctrl+C - Interrupt foreground process (sends SIGINT)\n", MAX_BUFF, CYAN);
-	printsColor("           Shell waits for process → Ctrl+C kills it\n", MAX_BUFF, CYAN);
-	printsColor("           When idle, Ctrl+C does nothing (shell stays alive)\n\n", MAX_BUFF, CYAN);
 	printsColor("Background execution:\n", MAX_BUFF, GREEN);
 	printsColor("  cmd &  - Execute command in background (no wait)\n", MAX_BUFF, CYAN);
 	printsColor("           Shell returns immediately to prompt\n", MAX_BUFF, CYAN);
 	printsColor("           Background jobs don't get keyboard input\n", MAX_BUFF, CYAN);
 	printsColor("           Use 'jobs' to list running background processes\n\n", MAX_BUFF, CYAN);
-	printsColor("Examples:\n", MAX_BUFF, GREEN);
-    printsColor("  test_mm 50000000       - test memory manager with 50MB\n", MAX_BUFF, WHITE);
-    printsColor("  test_processes 5       - test with 5 processes\n", MAX_BUFF, WHITE);
-    printsColor("  test_priority 2000     - priority round robin demo\n", MAX_BUFF, WHITE);
-    printsColor("  test_synchro 10 1      - synchronized test with params\n", MAX_BUFF, WHITE);
-	printsColor("  loop -p 2              - spawn loop process with priority 2\n", MAX_BUFF, WHITE);
-	printsColor("  loop &                 - run loop in background\n", MAX_BUFF, WHITE);
-	printsColor("  loop -p 2 &            - run loop with prio 2 in background\n", MAX_BUFF, WHITE);
-	printsColor("  jobs                   - list all background jobs\n", MAX_BUFF, WHITE);
-	printsColor("  nice 3 1               - change process 3 priority to 1\n", MAX_BUFF, WHITE);
-	printsColor("\n", MAX_BUFF, WHITE);
 	printsColor("Pipe examples:\n", MAX_BUFF, GREEN);
 	printsColor("  echo hola | wc         - count lines in 'hola'\n", MAX_BUFF, CYAN);
 	printsColor("  echo \"hola mundo\" | wc  - count lines with spaces\n", MAX_BUFF, CYAN);
@@ -344,7 +331,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs", "shell"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -374,7 +361,8 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_wc,
 	cmd_filter,
 	cmd_echo,
-	cmd_jobs
+	cmd_jobs,
+	cmd_shell
 };
 
 // Bucle principal de la shell: lee caracteres y procesa líneas completas
@@ -1604,6 +1592,17 @@ void cmd_echo()
 void cmd_jobs()
 {
 	jobs_list();
+}
+
+void cmd_shell()
+{
+	extern void shell_main(int argc, char **argv);
+	
+	printsColor("\nStarting new shell with FG/BG support...\n", MAX_BUFF, LIGHT_BLUE);
+	printsColor("Type 'help' in the new shell for commands\n", MAX_BUFF, CYAN);
+	printsColor("Use '&' at the end of commands to run in background\n\n", MAX_BUFF, CYAN);
+	
+	shell_main(0, NULL);
 }
 
 void historyCaller(int direction)

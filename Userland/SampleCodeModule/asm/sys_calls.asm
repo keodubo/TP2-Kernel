@@ -44,6 +44,7 @@ GLOBAL sys_read_fd
 GLOBAL sys_write_fd
 GLOBAL sys_close_fd
 GLOBAL sys_dup2
+GLOBAL sys_create_process_ex
 section .text
 
 ; Pasaje de parametros en C:
@@ -284,5 +285,13 @@ sys_close_fd:
 
 sys_dup2:
     mov rax, 44
+    int 80h
+    ret
+
+sys_create_process_ex:
+    mov rax, 45
+    mov r10, rcx        ; 4to parámetro (name)
+    ; r8 ya tiene el 5to parámetro (priority)
+    ; r9 ya tiene el 6to parámetro (is_fg)
     int 80h
     ret

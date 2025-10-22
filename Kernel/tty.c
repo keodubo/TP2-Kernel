@@ -29,6 +29,7 @@ struct tty {
     bool eof;
     tty_waiter_t *wait_head;
     tty_waiter_t *wait_tail;
+    int fg_pid;  // PID del proceso foreground que controla la TTY
 };
 
 static tty_t default_tty;
@@ -83,6 +84,7 @@ static pcb_t *dequeue_waiter(tty_t *t) {
 tty_t *tty_default(void) {
     if (!default_tty_initialized) {
         memset(&default_tty, 0, sizeof(default_tty));
+        default_tty.fg_pid = -1;  // Inicialmente sin foreground
         default_tty_initialized = true;
     }
     return &default_tty;
@@ -244,4 +246,44 @@ void tty_handle_input(uint8_t scancode, char ascii) {
     }
 
     tty_push_char(t, ascii);
+}
+
+// Establece el proceso que tiene control de la TTY (foreground)
+void tty_set_foreground(int pid) {
+    tty_t *t = tty_default();
+    if (t == NULL) {
+        return;
+    }
+
+    uint64_t flags = irq_save_local();
+    t->fg_pid = pid;
+    irq_restore_local(flags);
+}
+
+// Verifica si un proceso puede leer de la TTY
+bool tty_can_read(int pid) {
+    tty_t *t = tty_default();
+    if (t == NULL) {
+        return false;
+    }
+
+    uint64_t flags = irq_save_local();
+    bool can_read = (t->fg_pid == pid);
+    irq_restore_local(flags);
+
+    return can_read;
+}
+
+// Obtiene el PID del proceso foreground actual
+int tty_get_foreground(void) {
+    tty_t *t = tty_default();
+    if (t == NULL) {
+        return -1;
+    }
+
+    uint64_t flags = irq_save_local();
+    int fg = t->fg_pid;
+    irq_restore_local(flags);
+
+    return fg;
 }

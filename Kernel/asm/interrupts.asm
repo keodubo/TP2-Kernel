@@ -222,9 +222,26 @@ exception_invalidOp:
 	call exception_handler
 
 interrupt_systemCall:
+	; Preparar parámetros para syscall_dispatcher
+	; Sistema espera: rdi, rsi, rdx, r10, r8, r9 desde userland
+	; C ABI espera: rdi, rsi, rdx, rcx, r8, r9
+	; Necesitamos pasar 7 parámetros: rdi, rsi, rdx, r10, r8, r9, rax
+	
+	; Guardar rax (número de syscall) y r9
+	push rax
+	push r9
+	
+	; Mover r10 a rcx (4to parámetro según C ABI)
 	mov rcx, r10
-	mov r9, rax
+	
+	; Restaurar r9 (6to parámetro)
+	pop r9
+	
+	; rax va como 7mo parámetro (en la pila según C ABI)
+	; Ya está en la pila desde el primer push
+	
 	call syscall_dispatcher
+	add rsp, 8        ; Limpiar rax de la pila
 	iretq
 
 haltcpu:
