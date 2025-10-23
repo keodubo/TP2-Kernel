@@ -177,30 +177,11 @@ void tty_push_char(tty_t *t, char c) {
         // Obtener el proceso en foreground y matarlo
         int fg_pid = proc_get_foreground_pid();
         
-        // DEBUG: Imprimir información
-        char debug_msg[64];
         const char *sigint_msg = "^C\n";
         tty_write(t, sigint_msg, 3);
         
         if (fg_pid > 0) {
-            // Formatear mensaje de debug
-            int len = 0;
-            const char *prefix = "[DEBUG] Killing FG process: ";
-            for (int i = 0; prefix[i] != '\0'; i++) {
-                debug_msg[len++] = prefix[i];
-            }
-            // Convertir PID a string simple
-            if (fg_pid >= 10) {
-                debug_msg[len++] = '0' + (fg_pid / 10);
-            }
-            debug_msg[len++] = '0' + (fg_pid % 10);
-            debug_msg[len++] = '\n';
-            tty_write(t, debug_msg, len);
-            
             proc_kill(fg_pid);
-        } else {
-            const char *no_fg_msg = "[DEBUG] No FG process to kill\n";
-            tty_write(t, no_fg_msg, 29);
         }
         return;
     }
@@ -258,23 +239,6 @@ void tty_set_foreground(int pid) {
     uint64_t flags = irq_save_local();
     t->fg_pid = pid;
     irq_restore_local(flags);
-    
-    // Debug: mostrar cambio de foreground
-    char msg[64];
-    int len = 0;
-    const char *prefix = "[TTY] FG now: ";
-    for (int i = 0; prefix[i] != '\0'; i++) {
-        msg[len++] = prefix[i];
-    }
-    if (pid > 0) {
-        if (pid >= 10) msg[len++] = '0' + (pid / 10);
-        msg[len++] = '0' + (pid % 10);
-    } else {
-        msg[len++] = '-';
-        msg[len++] = '1';
-    }
-    msg[len++] = '\n';
-    tty_write(t, msg, len);
 }
 
 // Verifica si un proceso puede leer de la TTY

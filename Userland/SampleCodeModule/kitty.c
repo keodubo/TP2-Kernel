@@ -301,7 +301,7 @@ void printHelp()
 	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>jobs               - list background processes", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>shell              - start new shell with FG/BG support (use '&' for background)", MAX_BUFF, LIGHT_GREEN);
+	printsColor("\n>sh                 - start new shell with FG/BG support (use '&' for background)", MAX_BUFF, LIGHT_GREEN);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
     printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
@@ -310,14 +310,11 @@ void printHelp()
 	printsColor("\n>cat                - read from stdin and write to stdout", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>wc                 - count lines from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>eliminator         - launch ELIMINATOR videogame", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
     printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
     printsColor("\n>test_priority [ms]- scheduling demo (default: 1500)", MAX_BUFF, YELLOW);
 	printsColor("\n>test_no_synchro [n]- run race condition without semaphores", MAX_BUFF, YELLOW);
 	printsColor("\n>test_synchro [n] [u] - run synchronized version using semaphores", MAX_BUFF, YELLOW);
-	printsColor("\n>test_sync [n] [u]  - alias for test_synchro", MAX_BUFF, YELLOW);
-	printsColor("\n>debug [on|off]     - toggle debug logging", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n\n", MAX_BUFF, WHITE);
 	printsColor("Background execution:\n", MAX_BUFF, GREEN);
@@ -332,7 +329,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs", "shell"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs", "sh"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -788,7 +785,6 @@ int checkLine()
 
 void cmd_help()
 {
-	printsColor("\n\n===== Listing a preview of available commands =====\n", MAX_BUFF, GREEN);
 	printHelp();
 }
 
