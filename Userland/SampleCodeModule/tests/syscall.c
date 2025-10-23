@@ -32,38 +32,56 @@ int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
   if (name != 0) {
     // Compare strings manually since we might not have strcmp
     char *el = "endless_loop";
+    char *elw = "endless_loop_wrapper";
     char *elp = "endless_loop_print";
+    char *elp_w = "endless_loop_print_wrapper";
     char *mpi = "my_process_inc";
     char *ztm = "zero_to_max";
     int i;
     
-    // Check endless_loop
-    for (i = 0; el[i] != '\0' && name[i] != '\0'; i++) {
-      if (el[i] != name[i]) break;
+    // Check endless_loop_wrapper first (more specific)
+    for (i = 0; elw[i] != '\0' && name[i] != '\0'; i++) {
+      if (elw[i] != name[i]) break;
     }
-    if (el[i] == '\0' && name[i] == '\0') {
+    if (elw[i] == '\0' && name[i] == '\0') {
       func = endless_loop_wrapper;
     } else {
-      // Check endless_loop_print
-      for (i = 0; elp[i] != '\0' && name[i] != '\0'; i++) {
-        if (elp[i] != name[i]) break;
+      // Check endless_loop
+      for (i = 0; el[i] != '\0' && name[i] != '\0'; i++) {
+        if (el[i] != name[i]) break;
       }
-      if (elp[i] == '\0' && name[i] == '\0') {
-        func = endless_loop_print_wrapper;
+      if (el[i] == '\0' && name[i] == '\0') {
+        func = endless_loop_wrapper;
       } else {
-        // Check my_process_inc
-        for (i = 0; mpi[i] != '\0' && name[i] != '\0'; i++) {
-          if (mpi[i] != name[i]) break;
+        // Check endless_loop_print_wrapper
+        for (i = 0; elp_w[i] != '\0' && name[i] != '\0'; i++) {
+          if (elp_w[i] != name[i]) break;
         }
-        if (mpi[i] == '\0' && name[i] == '\0') {
-          func = my_process_inc_entry;
+        if (elp_w[i] == '\0' && name[i] == '\0') {
+          func = endless_loop_print_wrapper;
         } else {
-          // Check zero_to_max
-          for (i = 0; ztm[i] != '\0' && name[i] != '\0'; i++) {
-            if (ztm[i] != name[i]) break;
+          // Check endless_loop_print
+          for (i = 0; elp[i] != '\0' && name[i] != '\0'; i++) {
+            if (elp[i] != name[i]) break;
           }
-          if (ztm[i] == '\0' && name[i] == '\0') {
-            func = zero_to_max_entry;
+          if (elp[i] == '\0' && name[i] == '\0') {
+            func = endless_loop_print_wrapper;
+          } else {
+            // Check my_process_inc
+            for (i = 0; mpi[i] != '\0' && name[i] != '\0'; i++) {
+              if (mpi[i] != name[i]) break;
+            }
+            if (mpi[i] == '\0' && name[i] == '\0') {
+              func = my_process_inc_entry;
+            } else {
+              // Check zero_to_max
+              for (i = 0; ztm[i] != '\0' && name[i] != '\0'; i++) {
+                if (ztm[i] != name[i]) break;
+              }
+              if (ztm[i] == '\0' && name[i] == '\0') {
+                func = zero_to_max_entry;
+              }
+            }
           }
         }
       }

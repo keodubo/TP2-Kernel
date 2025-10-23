@@ -258,6 +258,23 @@ void tty_set_foreground(int pid) {
     uint64_t flags = irq_save_local();
     t->fg_pid = pid;
     irq_restore_local(flags);
+    
+    // Debug: mostrar cambio de foreground
+    char msg[64];
+    int len = 0;
+    const char *prefix = "[TTY] FG now: ";
+    for (int i = 0; prefix[i] != '\0'; i++) {
+        msg[len++] = prefix[i];
+    }
+    if (pid > 0) {
+        if (pid >= 10) msg[len++] = '0' + (pid / 10);
+        msg[len++] = '0' + (pid % 10);
+    } else {
+        msg[len++] = '-';
+        msg[len++] = '1';
+    }
+    msg[len++] = '\n';
+    tty_write(t, msg, len);
 }
 
 // Verifica si un proceso puede leer de la TTY

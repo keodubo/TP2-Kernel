@@ -68,6 +68,9 @@ void endless_loop() {
 void endless_loop_wrapper(int argc, char **argv) {
   (void)argc;
   (void)argv;
+  // Debug: imprimir al iniciar
+  int64_t pid = my_getpid();
+  printf("[ELW %ld] started\n", pid);
   while (1)
     ;
 }

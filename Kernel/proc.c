@@ -3,11 +3,10 @@
 #include "include/lib.h"
 #include "include/tty.h"
 
-// Archivo: proc.c
-// Propósito: Gestión de procesos (PCB), creación, destrucción, comunicación
-// Resumen: Implementa la tabla de procesos, creación de procesos, manejo de
-//          zombis, espera y notificaciones entre procesos. Incluye utilidades
-//          para la gestión del stack de usuario y trampolines.
+// Gestion de procesos (PCB)
+// Implementa tabla de procesos, creacion, destruccion, comunicacion
+// Incluye manejo de zombis, espera y notificaciones entre procesos
+// Utilidades para gestion del stack de usuario y trampolines
 
 
 #define KSTACK_SIZE (16 * 1024)
@@ -252,17 +251,35 @@ int proc_kill(int pid) {
         return -1;
     }
 
-    // Si el proceso a matar es el foreground, liberar la TTY
+    // Si el proceso a matar es foreground, devolver control al padre
+    // No desbloqueamos manualmente al padre porque notify_parent_exit lo hara
+    // automaticamente despues de preparar el resultado del wait
     if (target->fg) {
         int parent_pid = target->parent_pid;
         pcb_t *parent = (parent_pid > 0) ? proc_by_pid(parent_pid) : NULL;
         
-        // Devolver el control al padre (típicamente la shell)
+        // Devolver el control al padre (tipicamente la shell)
         if (parent != NULL && parent->state != EXITED) {
+            // El padre recibira el foreground despues de ser notificado
             proc_set_foreground(parent_pid);
         } else {
-            // Sin padre válido, liberar la TTY
-            tty_set_foreground(-1);
+            // Sin padre valido o padre muerto, buscar el shell principal
+            pcb_t *shell_proc = NULL;
+            for (int i = 0; i < MAX_PROCS; i++) {
+                if (procs[i].used && procs[i].state != EXITED && 
+                    (strcmp(procs[i].name, "shell") == 0 || 
+                     strcmp(procs[i].name, "kitty") == 0)) {
+                    shell_proc = &procs[i];
+                    break;
+                }
+            }
+            
+            if (shell_proc != NULL) {
+                proc_set_foreground(shell_proc->pid);
+            } else {
+                // Ultimo recurso: liberar la TTY
+                tty_set_foreground(-1);
+            }
         }
     }
 
@@ -578,8 +595,9 @@ int proc_wait(int target_pid, int *status) {
     waited_pid = consume_wait_result(parent, target_pid, &exit_status);
     parent->waiting_for = 0;
     
-    // Restaurar el padre como foreground después del wait
+    // Restaurar el padre como foreground despues del wait
     parent->fg = true;
+    tty_set_foreground(parent->pid);  // Actualizar la TTY tambien
     
     if (target_child != NULL) {
         target_child->waiter_head = NULL;

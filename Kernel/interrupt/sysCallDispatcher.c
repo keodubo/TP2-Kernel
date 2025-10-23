@@ -198,13 +198,15 @@ static uint64_t sys_mem_info(memory_info_t* info)
 
 static uint64_t sys_create_process(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority)
 {
-    // Por compatibilidad: procesos creados sin especificar fg/bg se crean como foreground
-    return proc_create(entry_point, argc, argv, priority, true, name);
+    // Por compatibilidad: procesos creados sin especificar fg/bg se crean como background
+    // Esto evita conflictos de TTY cuando test_processes crea multiples procesos internos
+    // Para crear procesos foreground, usar sys_create_process_ex con is_fg=1
+    return proc_create(entry_point, argc, argv, priority, false, name);
 }
 
 static uint64_t sys_create_process_ex(void (*entry_point)(int, char**), int argc, char** argv, const char* name, uint8_t priority, int is_fg)
 {
-    // Nueva versión que permite especificar si es foreground o background
+    // Nueva version que permite especificar si es foreground o background
     return proc_create(entry_point, argc, argv, priority, is_fg ? true : false, name);
 }
 

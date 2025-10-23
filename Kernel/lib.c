@@ -1,9 +1,9 @@
 #include <stdint.h>
 
 // Archivo: lib.c
-// Propósito: Implementaciones básicas de utilidades de memoria (memcpy/memset)
+// Proposito: Implementaciones basicas de utilidades de memoria (memcpy/memset/strcmp)
 // Resumen: Proporciona versiones simples y eficientes de memset y memcpy
-//          utilizadas por el kernel; memcpy asume buffers no solapados.
+//          utilizadas por el kernel; memcpy asume buffers no solapados
 
 void * memset(void * destination, int32_t c, uint64_t length)
 {
@@ -52,4 +52,13 @@ void * memcpy(void * destination, const void * source, uint64_t length)
 	}
 
 	return destination;
+}
+
+int strcmp(const char *s1, const char *s2)
+{
+	while (*s1 && (*s1 == *s2)) {
+		s1++;
+		s2++;
+	}
+	return *(const unsigned char *)s1 - *(const unsigned char *)s2;
 }

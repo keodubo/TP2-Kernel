@@ -89,7 +89,8 @@ static void free_spawn_args(char **argv, int argc) {
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv) {
     DBG_MSG("spawn_test_process");
     DBG_VAL("argc", (uint64_t)argc);
-    int64_t pid = sys_create_process(entry, argc, argv, name, DEFAULT_PRIORITY);
+    // Crear el proceso como foreground para que la shell pueda matarlo con Ctrl+C
+    int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, 1);
     if (pid < 0 && argv != NULL) {
         free_spawn_args(argv, argc);
     }
@@ -963,7 +964,7 @@ void cmd_test_processes()
 	printsColor("\n    PROCESS MANAGEMENT TEST", MAX_BUFF, YELLOW);
 	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
 	printsColor("Running test_processes\n", MAX_BUFF, WHITE);
-	printsColor("Press 1 or 2 to change process priorities or C to stop.\n", MAX_BUFF, ORANGE);
+	printsColor("Press Ctrl+C to stop the test.\n", MAX_BUFF, ORANGE);
 	
 	char token[32];
 	int idx = 0;
