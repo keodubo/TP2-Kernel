@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <stddef.h>
 #include <stdio.h>
 #include "syscall.h"
 #include "test_util.h"
@@ -49,9 +48,6 @@ uint64_t my_process_inc(uint64_t argc, char *argv[]) {
   if (use_sem)
     my_sem_close(SEM_ID);
 
-  if (use_sem)
-    my_sem_unlink(SEM_ID);
-
   return 0;
 }
 
@@ -77,25 +73,26 @@ uint64_t test_sync(uint64_t argc, char *argv[]) { //{n, use_sem, 0}
     my_wait(pids[i + TOTAL_PAIR_PROCESSES]);
   }
 
-  printf("Final value: %d\n", global);
+  printf("Final value: %ld\n", global);
 
   return 0;
 }
 
 uint64_t test_no_synchro(uint64_t argc, char *argv[]) {
-  char *args[3];
+  char *args[] = {argv[0], "0", NULL};
   if (argc >= 1 && argv != NULL) {
     args[0] = argv[0];
   } else {
     args[0] = "10";
   }
-  args[1] = "0";
+  args[1] = "0";  // No semaphores
   args[2] = NULL;
+  
   return test_sync(2, args);
 }
 
 uint64_t test_synchro(uint64_t argc, char *argv[]) {
-  char *args[3];
+  char *args[] = {argv[0], "1", NULL};
   if (argc >= 1 && argv != NULL) {
     args[0] = argv[0];
   } else {
@@ -104,8 +101,9 @@ uint64_t test_synchro(uint64_t argc, char *argv[]) {
   if (argc >= 2 && argv != NULL) {
     args[1] = argv[1];
   } else {
-    args[1] = "1";
+    args[1] = "1";  // Use semaphores
   }
   args[2] = NULL;
+  
   return test_sync(2, args);
 }

@@ -2,7 +2,7 @@
 #include "test_util.h"
 #include <stdio.h>
 #include "../include/sys_calls.h"
-#include <string.h>
+#include "../include/userlib.h"
 
 #define MAX_BLOCKS 128
 
@@ -11,39 +11,14 @@ typedef struct MM_rq {
   uint32_t size;
 } mm_rq;
 
-// Funcion helper para imprimir numeros
-static void print_number(uint32_t num) {
-  char buffer[20];
-  int i = 0;
-  
-  if (num == 0) {
-    sys_write(1, '0');
-    return;
-  }
-  
-  while (num > 0) {
-    buffer[i++] = '0' + (num % 10);
-    num /= 10;
-  }
-  
-  while (i > 0) {
-    sys_write(1, buffer[--i]);
-  }
-}
-
-static void print_string(const char *str) {
-  while (*str) {
-    sys_write(1, *str);
-    str++;
-  }
-}
-
 uint64_t test_mm(uint64_t argc, char *argv[]) {
 
   mm_rq mm_rqs[MAX_BLOCKS];
   uint8_t rq;
   uint32_t total;
   uint64_t max_memory;
+
+  printf("Iniciando test_mm con %s bytes\n", argv[0]);
 
   if (argc != 1)
     return -1;
@@ -52,24 +27,30 @@ uint64_t test_mm(uint64_t argc, char *argv[]) {
     return -1;
 
   while (1) {
+    printf("Ciclo de test_mm iniciado\n");
     rq = 0;
     total = 0;
 
     // Request as many blocks as we can
     while (rq < MAX_BLOCKS && total < max_memory) {
-      mm_rqs[rq].size = GetUniform(max_memory - total - 1) + 1;
+      // Limitar tamaño maximo para evitar bloques gigantes
+      uint32_t max_block_size = (max_memory - total > 1024) ? 1024 : (max_memory - total);
+      if (max_block_size < 8) break; // Tamaño minimo
       
-      print_string("Requesting ");
-      print_number(mm_rqs[rq].size);
-      print_string(" bytes\n");
-      
+      mm_rqs[rq].size = GetUniform(max_block_size - 8) + 8; // Entre 8 y max_block_size bytes
+      printf("Intentando asignar bloque %d de %d bytes\n", rq, mm_rqs[rq].size);
       mm_rqs[rq].address = sys_malloc(mm_rqs[rq].size);
 
       if (mm_rqs[rq].address) {
         total += mm_rqs[rq].size;
         rq++;
+        printf("Bloque %d asignado exitosamente\n", rq-1);
+      } else {
+        printf("Error: no se pudo asignar bloque %d\n", rq);
+        break;
       }
     }
+    printf("Total asignados: %d bloques, %d bytes\n", rq, total);
 
     // Set
     uint32_t i;
@@ -89,5 +70,8 @@ uint64_t test_mm(uint64_t argc, char *argv[]) {
     for (i = 0; i < rq; i++)
       if (mm_rqs[i].address)
         sys_free(mm_rqs[i].address);
+    printf("Ciclo completado\n");
   }
+  
+  return 0;
 }

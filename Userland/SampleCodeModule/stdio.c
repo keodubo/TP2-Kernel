@@ -83,6 +83,17 @@ int printf(const char *format, ...) {
                     *ptr++ = *s++;
                     count++;
                 }
+            } else if (*format == 'l' && *(format + 1) == 'd') {
+                // Handle %ld format
+                format++; // Skip the 'l'
+                int64_t val = va_arg(args, int64_t);
+                char num_str[32];
+                itoa(val, num_str, 10);
+                char *s = num_str;
+                while (*s) {
+                    *ptr++ = *s++;
+                    count++;
+                }
             } else if (*format == 'u') {
                 unsigned int val = va_arg(args, unsigned int);
                 char num_str[32];
@@ -153,6 +164,17 @@ int sprintf(char *str, const char *format, ...) {
             format++;
             if (*format == 'd' || *format == 'i') {
                 int val = va_arg(args, int);
+                char num_str[32];
+                itoa(val, num_str, 10);
+                char *s = num_str;
+                while (*s) {
+                    *ptr++ = *s++;
+                    count++;
+                }
+            } else if (*format == 'l' && *(format + 1) == 'd') {
+                // Handle %ld format
+                format++; // Skip the 'l'
+                int64_t val = va_arg(args, int64_t);
                 char num_str[32];
                 itoa(val, num_str, 10);
                 char *s = num_str;

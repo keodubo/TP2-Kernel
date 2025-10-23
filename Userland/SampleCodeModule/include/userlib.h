@@ -50,6 +50,9 @@ int random();
 /* returns lenght of a string*/
 int strlen(const char *str);
 
+/* sets memory to a value*/
+void *memset(void *dest, int32_t c, uint64_t length);
+
 /* compares str1 with str2*/
 int strcmp(const char *str1, const char *str2);
 

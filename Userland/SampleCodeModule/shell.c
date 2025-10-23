@@ -29,7 +29,9 @@ static int cmd_nice(int argc, char **argv);
 extern int64_t test_processes(uint64_t argc, char *argv[]);
 extern int64_t test_prio(uint64_t argc, char *argv[]);
 extern int64_t test_sync(uint64_t argc, char *argv[]);
-extern void test_mm(int argc, char **argv);
+extern uint64_t test_mm(uint64_t argc, char *argv[]);
+extern uint64_t test_no_synchro(uint64_t argc, char *argv[]);
+extern uint64_t test_synchro(uint64_t argc, char *argv[]);
 extern void cat_main(int argc, char **argv);
 extern void wc_main(int argc, char **argv);
 extern void filter_main(int argc, char **argv);
@@ -44,9 +46,10 @@ static void test_processes_wrapper(int argc, char **argv) {
 }
 
 static void test_prio_wrapper(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    test_prio(0, NULL);
+    char *default_arg = "1000000";
+    char **args = (argc > 0) ? argv : &default_arg;
+    uint64_t count = (argc > 0) ? argc : 1;
+    test_prio(count, args);
 }
 
 static void test_sync_wrapper(int argc, char **argv) {
@@ -54,6 +57,27 @@ static void test_sync_wrapper(int argc, char **argv) {
     char **args = (argc >= 2) ? argv : default_args;
     uint64_t count = (argc >= 2) ? argc : 2;
     test_sync(count, args);
+}
+
+static void test_mm_wrapper(int argc, char **argv) {
+    char *default_arg = "1024";
+    char **args = (argc > 0) ? argv : &default_arg;
+    uint64_t count = (argc > 0) ? argc : 1;
+    test_mm(count, args);
+}
+
+static void test_no_synchro_wrapper(int argc, char **argv) {
+    char *default_arg = "10";
+    char **args = (argc > 0) ? argv : &default_arg;
+    uint64_t count = (argc > 0) ? argc : 1;
+    test_no_synchro(count, args);
+}
+
+static void test_synchro_wrapper(int argc, char **argv) {
+    char *default_args[] = {"10", "1"};
+    char **args = (argc >= 2) ? argv : default_args;
+    uint64_t count = (argc >= 2) ? argc : 2;
+    test_synchro(count, args);
 }
 
 // Tabla de comandos integrados
@@ -268,7 +292,7 @@ static int launch_process(const char *name, char **argv, int is_background) {
     } else if (strcmp(name, "test_sync") == 0) {
         entry = test_sync_wrapper;
     } else if (strcmp(name, "test_mm") == 0) {
-        entry = test_mm;
+        entry = test_mm_wrapper;
     } else if (strcmp(name, "cat") == 0) {
         entry = cat_main;
     } else if (strcmp(name, "wc") == 0) {
@@ -277,6 +301,10 @@ static int launch_process(const char *name, char **argv, int is_background) {
         entry = filter_main;
     } else if (strcmp(name, "loop") == 0) {
         entry = loop_main;
+    } else if (strcmp(name, "test_no_synchro") == 0) {
+        entry = test_no_synchro_wrapper;
+    } else if (strcmp(name, "test_synchro") == 0) {
+        entry = test_synchro_wrapper;
     } else if (strcmp(name, "test_fg_bg") == 0) {
         extern void test_fg_bg_main(int, char **);
         entry = test_fg_bg_main;
