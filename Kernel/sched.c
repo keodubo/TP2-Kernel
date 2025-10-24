@@ -37,6 +37,9 @@ void sched_init(void) {
         idle_proc = proc_by_pid(idle_pid);
         if (idle_proc != NULL) {
             idle_proc->fg = false;
+            // Remover el idle de las colas de ready
+            // El idle solo debe ejecutarse cuando no hay otros procesos
+            sched_remove(idle_proc);
             idle_proc->state = RUNNING;
             idle_proc->ticks_left = TIME_SLICE_TICKS;
             current = idle_proc;
@@ -125,7 +128,8 @@ uint64_t schedule(uint64_t cur_rsp) {
 
     pcb_t *prev = current;
 
-    if (prev->state == RUNNING) {
+    // El idle process nunca se encola, siempre queda como fallback
+    if (prev->state == RUNNING && prev != idle_proc) {
         prev->state = READY;
         prev->ticks_left = TIME_SLICE_TICKS;
         q_push(prev);

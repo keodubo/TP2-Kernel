@@ -88,6 +88,8 @@ void endless_loop_print_wrapper(int argc, char **argv) {
 
   while (1) {
     printf("%ld ", pid);
-    bussy_wait(10000000);
+    for (int i = 0; i < 100000000; i++)
+      ;
+    my_yield();
   }
 }

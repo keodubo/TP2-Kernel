@@ -7,16 +7,9 @@
 extern void endless_loop_wrapper(int, char**);
 extern void endless_loop_print_wrapper(int, char**);
 extern uint64_t my_process_inc(uint64_t argc, char *argv[]);
-extern void zero_to_max();
 
 static void my_process_inc_entry(int argc, char **argv) {
   (void)my_process_inc((uint64_t)argc, argv);
-}
-
-static void zero_to_max_entry(int argc, char **argv) {
-  (void)argc;
-  (void)argv;
-  zero_to_max();
 }
 
 int64_t my_getpid() {
@@ -36,7 +29,6 @@ int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
     char *elp = "endless_loop_print";
     char *elp_w = "endless_loop_print_wrapper";
     char *mpi = "my_process_inc";
-    char *ztm = "zero_to_max";
     int i;
     
     // Check endless_loop_wrapper first (more specific)
@@ -73,14 +65,6 @@ int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
             }
             if (mpi[i] == '\0' && name[i] == '\0') {
               func = my_process_inc_entry;
-            } else {
-              // Check zero_to_max
-              for (i = 0; ztm[i] != '\0' && name[i] != '\0'; i++) {
-                if (ztm[i] != name[i]) break;
-              }
-              if (ztm[i] == '\0' && name[i] == '\0') {
-                func = zero_to_max_entry;
-              }
             }
           }
         }
@@ -88,7 +72,9 @@ int64_t my_create_process(char *name, uint64_t argc, char *argv[]) {
     }
   }
   
-  return (int64_t)sys_create_process(func, (int)argc, argv, name, 1);
+  // Los procesos hijos NO deben ser foreground (0 en vez de 1)
+  // Solo el proceso que corre directamente desde la shell debe ser fg
+  return (int64_t)sys_create_process(func, (int)argc, argv, name, 0);
 }
 
 int64_t my_nice(uint64_t pid, uint64_t newPrio) {
