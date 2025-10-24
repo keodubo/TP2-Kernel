@@ -82,6 +82,4 @@ int64_t test_processes(uint64_t argc, char *argv[]) {
         }
     }
   }
-  
-  return 0;
 }

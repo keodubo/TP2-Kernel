@@ -817,12 +817,52 @@ static void detach_children(pcb_t *parent) {
     while (child != NULL) {
         pcb_t *next = child->sibling_next;
         child->sibling_next = NULL;
-        if (child->parent_pid == parent->pid) {
-            child->parent_pid = -1;
-        }
-        if (child->waiter_head == parent) {
+        
+        // Si el hijo todavía está vivo, matarlo
+        if (child->state != EXITED) {
+            // Remover de scheduler si está en READY
+            if (child->state == READY) {
+                sched_remove(child);
+            }
+            
+            // Marcar como terminado
+            child->exit_code = 0;
+            child->state = EXITED;
+            child->ticks_left = 0;
+            child->exited = true;
+            child->waiting_for = 0;
             child->waiter_head = NULL;
+            child->pending_exit_valid = false;
+            child->parent_pid = -1;
+            
+            // No llamar recursivamente a detach_children para evitar loops
+            // pero sí limpiar sus hijos
+            pcb_t *grandchild = child->child_head;
+            child->child_head = NULL;
+            while (grandchild != NULL) {
+                pcb_t *next_gc = grandchild->sibling_next;
+                grandchild->sibling_next = NULL;
+                grandchild->parent_pid = -1;
+                if (grandchild->waiter_head == child) {
+                    grandchild->waiter_head = NULL;
+                }
+                grandchild = next_gc;
+            }
+            
+            // Remover de la lista de procesos y agregar a zombies
+            remove_proc(child);
+            cleanup_wait_results(child);
+            enqueue_zombie(child);
+        } else {
+            // El hijo ya está muerto, solo desenlazar
+            if (child->parent_pid == parent->pid) {
+                child->parent_pid = -1;
+            }
+            if (child->waiter_head == parent) {
+                child->waiter_head = NULL;
+            }
         }
+        
         child = next;
     }
 }
