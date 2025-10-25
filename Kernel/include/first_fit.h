@@ -2,6 +2,7 @@
 #define _FIRST_FIT_H_
 
 #include "memory_manager.h"
+#include "mm_stats.h"
 
 // Estructura de un bloque de memoria para First Fit
 typedef struct memory_block {
@@ -25,5 +26,6 @@ void first_fit_free(void* ptr);
 void first_fit_get_info(memory_info_t* info);
 void first_fit_debug_print();
 int first_fit_check_integrity();
+void first_fit_collect_stats(mm_stats_t *stats);
 
 #endif // _FIRST_FIT_H_

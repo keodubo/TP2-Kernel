@@ -18,5 +18,6 @@ void buddy_free(void* ptr);
 void buddy_get_info(memory_info_t* info);
 void buddy_debug_print(void);
 int buddy_check_integrity(void);
+void buddy_collect_stats(mm_stats_t *stats);
 
 #endif

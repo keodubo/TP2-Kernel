@@ -285,9 +285,12 @@ void cmd_waitpid(void);
 void cmd_cat(void);
 void cmd_wc(void);
 void cmd_filter(void);
+void cmd_mem(void);
 void cmd_echo(void);
 void cmd_jobs(void);
 void printPrompt(void);
+
+extern int mem_command(int argc, char **argv);
 
 void printHelp()
 {
@@ -309,6 +312,7 @@ void printHelp()
     printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
     printsColor("\n>waitpid <pid|-1>  - wait for a child to finish", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>echo <text>        - print text to stdout", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>mem [-v]           - show memory usage statistics", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>cat                - read from stdin and write to stdout", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>wc                 - count lines from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
@@ -328,7 +332,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs", "sh"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "jobs", "sh"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -353,6 +357,7 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_kill,
 	cmd_yield,
 	cmd_waitpid,
+	cmd_mem,
 	cmd_cat,
 	cmd_wc,
 	cmd_filter,
@@ -1537,6 +1542,33 @@ void cmd_waitpid()
 	}
 
 	printf("\nwaitpid -> child %d exited with status %d\n", (int)waited, status);
+}
+
+void cmd_mem()
+{
+	char *argvv[3] = {"mem", NULL, NULL};
+	char arg_buf[64];
+	int idx = 0;
+	int argc_local = 1;
+
+	if (parameter[0] != '\0') {
+		if (!next_token(parameter, &idx, arg_buf, sizeof(arg_buf))) {
+			printsColor("\nmem: invalid argument\n", MAX_BUFF, RED);
+			return;
+		}
+		argvv[argc_local++] = arg_buf;
+
+		char extra[16];
+		if (next_token(parameter, &idx, extra, sizeof(extra))) {
+			printsColor("\nmem: too many arguments\n", MAX_BUFF, RED);
+			return;
+		}
+	}
+
+	int status = mem_command(argc_local, argvv);
+	if (status != 0) {
+		printf("\nmem exited with status %d\n", status);
+	}
 }
 
 void cmd_cat()

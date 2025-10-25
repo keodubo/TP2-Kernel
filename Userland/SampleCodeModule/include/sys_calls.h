@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <colors.h>
+#include <mm_stats.h>
 
 // Wrapper de syscalls que el userland expone como librería estándar
 
@@ -73,6 +74,7 @@ void* sys_malloc(uint64_t size);
 uint64_t sys_free(void* ptr);
 
 uint64_t sys_mem_info(memory_info_t* info);
+int64_t sys_mm_get_stats(mm_stats_t *stats);
 
 // Process management syscalls
 int64_t sys_getpid();

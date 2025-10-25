@@ -20,6 +20,7 @@ GLOBAL sys_stopSpeaker
 GLOBAL sys_malloc
 GLOBAL sys_free
 GLOBAL sys_mem_info
+GLOBAL sys_mm_get_stats
 GLOBAL sys_getpid
 GLOBAL sys_create_process
 GLOBAL sys_kill
@@ -162,6 +163,11 @@ sys_free:
 
 sys_mem_info:
     mov rax, 0x14
+    int 80h
+    ret
+
+sys_mm_get_stats:
+    mov rax, 0x2E
     int 80h
     ret
 

@@ -1,0 +1,449 @@
+diff --git a/Kernel/Makefile b/Kernel/Makefile
+index b3b370a..c48889f 100755
+--- a/Kernel/Makefile
++++ b/Kernel/Makefile
+@@ -58,6 +58,10 @@ ifneq ($(MM_FLAG),)
+ 	GCCFLAGS += $(MM_FLAG)
+ endif
+ 
++ifneq ($(findstring USE_BUDDY_SYSTEM,$(MM_FLAG)),)
++	GCCFLAGS += -DCONFIG_MM_BUDDY
++endif
++
+ all: $(KERNEL) $(KERNEL_ELF)
+ 
+ $(KERNEL): $(STATICLIBS) $(ALL_OBJECTS)
+@@ -82,4 +86,4 @@ buddy:
+ 	@echo "Compilando con Buddy System..."
+ 	$(MAKE) MM_FLAG=-DUSE_BUDDY_SYSTEM all
+ 
+-.PHONY: all clean buddy
+\ No newline at end of file
++.PHONY: all clean buddy
+diff --git a/Kernel/buddy_system.c b/Kernel/buddy_system.c
+index 7f40c2a..29ef36d 100644
+--- a/Kernel/buddy_system.c
++++ b/Kernel/buddy_system.c
+@@ -1,7 +1,34 @@
+ #include "buddy_system.h"
+ #include "naiveConsole.h"
++#include "interrupts.h"
+ #include <lib.h>
+ 
++static uint64_t mm_irq_save(void) {
++    uint64_t flags;
++    __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
++    _cli();
++    return flags;
++}
++
++static void mm_irq_restore(uint64_t flags) {
++    if (flags & (1ULL << 9)) {
++        _sti();
++    }
++}
++
++static void mm_stats_set_name(mm_stats_t *stats, const char *name) {
++    if (stats == NULL || name == NULL) {
++        return;
++    }
++    uint64_t i = 0;
++    for (; i < MM_NAME_MAX - 1 && name[i] != 0; i++) {
++        stats->mm_name[i] = name[i];
++    }
++    if (i < MM_NAME_MAX) {
++        stats->mm_name[i] = 0;
++    }
++}
++
+ // Estructura de nodo libre en las listas de bloques
+ typedef struct free_node {
+     struct free_node* next;
+@@ -337,3 +364,77 @@ int buddy_check_integrity(void) {
+     
+     return (counted_free == stat_free_blocks) ? 1 : 0;
+ }
++
++void buddy_collect_stats(mm_stats_t *stats) {
++    if (stats == NULL) {
++        return;
++    }
++
++    memset(stats, 0, sizeof(*stats));
++    mm_stats_set_name(stats, "buddy");
++
++    if (!initialized) {
++        return;
++    }
++
++    uint64_t flags = mm_irq_save();
++
++    stats->heap_total = stat_total;
++    stats->used_bytes = stat_used;
++    stats->free_bytes = (stat_total >= stat_used) ? (stat_total - stat_used) : 0;
++    stats->free_blocks = stat_free_blocks;
++    stats->has_buddy = 1;
++    stats->heap_base = (uint64_t)region_base;
++    stats->heap_end = (uint64_t)region_end;
++
++    uint8_t relative_max = 0;
++    if (max_order >= BUDDY_MIN_ORDER) {
++        relative_max = (uint8_t)(max_order - BUDDY_MIN_ORDER);
++    }
++    if (relative_max >= MM_MAX_ORDER) {
++        relative_max = MM_MAX_ORDER - 1;
++    }
++    stats->max_order = relative_max;
++
++    uint64_t computed_free = 0;
++    for (unsigned order = BUDDY_MIN_ORDER; order <= max_order; order++) {
++        uint64_t block_size = 1ULL << order;
++        uint64_t count = 0;
++        free_node_t *node = free_lists[order];
++        while (node != NULL) {
++            count++;
++            node = node->next;
++        }
++
++        unsigned idx = 0;
++        if (order >= BUDDY_MIN_ORDER) {
++            idx = (unsigned)(order - BUDDY_MIN_ORDER);
++        }
++        if (idx < MM_MAX_ORDER) {
++            stats->orders[idx].order = idx;
++            stats->orders[idx].block_size = block_size;
++            stats->orders[idx].free_count = count;
++        }
++
++        if (count > 0 && block_size > stats->largest_free) {
++            stats->largest_free = block_size;
++        }
++        computed_free += count * block_size;
++    }
++
++    mm_irq_restore(flags);
++
++    if (computed_free < stats->free_bytes) {
++        stats->free_bytes = computed_free;
++        if (stats->heap_total >= stats->free_bytes) {
++            stats->used_bytes = stats->heap_total - stats->free_bytes;
++        }
++    } else if (computed_free > stats->free_bytes && stats->heap_total >= computed_free) {
++        stats->free_bytes = computed_free;
++        stats->used_bytes = stats->heap_total - stats->free_bytes;
++    }
++
++    if (stats->largest_free > stats->free_bytes) {
++        stats->largest_free = stats->free_bytes;
++    }
++}
+diff --git a/Kernel/first_fit.c b/Kernel/first_fit.c
+index f42a164..9679370 100644
+--- a/Kernel/first_fit.c
++++ b/Kernel/first_fit.c
+@@ -1,7 +1,34 @@
+ #include "first_fit.h"
+ #include "naiveConsole.h"
++#include "interrupts.h"
+ #include <lib.h>
+ 
++static uint64_t mm_irq_save(void) {
++    uint64_t flags;
++    __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
++    _cli();
++    return flags;
++}
++
++static void mm_irq_restore(uint64_t flags) {
++    if (flags & (1ULL << 9)) {
++        _sti();
++    }
++}
++
++static void mm_stats_set_name(mm_stats_t *stats, const char *name) {
++    if (stats == NULL || name == NULL) {
++        return;
++    }
++    uint64_t i = 0;
++    for (; i < MM_NAME_MAX - 1 && name[i] != 0; i++) {
++        stats->mm_name[i] = name[i];
++    }
++    if (i < MM_NAME_MAX) {
++        stats->mm_name[i] = 0;
++    }
++}
++
+ // Variables globales para el heap
+ static memory_block_t* heap_start = NULL;
+ static void* heap_end = NULL;
+@@ -299,6 +326,66 @@ int first_fit_check_integrity() {
+         
+         current = current->next;
+     }
+-    
++
+     return errors == 0;
+-}
+\ No newline at end of file
++}
++
++void first_fit_collect_stats(mm_stats_t *stats) {
++    if (stats == NULL) {
++        return;
++    }
++
++    memset(stats, 0, sizeof(*stats));
++    mm_stats_set_name(stats, "simple");
++    stats->has_buddy = 0;
++
++    if (!initialized || heap_start == NULL) {
++        stats->heap_total = 0;
++        return;
++    }
++
++    uint64_t flags = mm_irq_save();
++
++    memory_block_t *current = heap_start;
++    uint64_t free_bytes = 0;
++    uint64_t free_blocks = 0;
++    uint32_t captured = 0;
++    uint32_t truncated = 0;
++
++    while (current != NULL) {
++        if (current->is_free) {
++            free_bytes += current->size;
++            free_blocks++;
++            if (current->size > stats->largest_free) {
++                stats->largest_free = current->size;
++            }
++            if (captured < MM_MAX_SIMPLE_BLOCKS) {
++                stats->freelist[captured].addr = (uint64_t)current;
++                stats->freelist[captured].size = current->size;
++                captured++;
++            } else {
++                truncated++;
++            }
++        }
++        current = current->next;
++    }
++
++    mm_irq_restore(flags);
++
++    stats->heap_total = total_heap_size;
++    stats->free_bytes = free_bytes;
++    if (stats->heap_total >= stats->free_bytes) {
++        stats->used_bytes = stats->heap_total - stats->free_bytes;
++    } else {
++        stats->used_bytes = 0;
++        stats->free_bytes = stats->heap_total;
++    }
++    stats->free_blocks = free_blocks;
++    stats->freelist_count = captured;
++    stats->freelist_truncated = truncated;
++    if (stats->largest_free > stats->free_bytes) {
++        stats->largest_free = stats->free_bytes;
++    }
++    stats->heap_base = (uint64_t)heap_start;
++    stats->heap_end = (uint64_t)heap_end;
++}
+diff --git a/Kernel/include/buddy_system.h b/Kernel/include/buddy_system.h
+index 69c1868..b72857a 100644
+--- a/Kernel/include/buddy_system.h
++++ b/Kernel/include/buddy_system.h
+@@ -18,5 +18,6 @@ void buddy_free(void* ptr);
+ void buddy_get_info(memory_info_t* info);
+ void buddy_debug_print(void);
+ int buddy_check_integrity(void);
++void buddy_collect_stats(mm_stats_t *stats);
+ 
+ #endif
+diff --git a/Kernel/include/first_fit.h b/Kernel/include/first_fit.h
+index b7acbbe..db8b4c6 100644
+--- a/Kernel/include/first_fit.h
++++ b/Kernel/include/first_fit.h
+@@ -2,6 +2,7 @@
+ #define _FIRST_FIT_H_
+ 
+ #include "memory_manager.h"
++#include "mm_stats.h"
+ 
+ // Estructura de un bloque de memoria para First Fit
+ typedef struct memory_block {
+@@ -25,5 +26,6 @@ void first_fit_free(void* ptr);
+ void first_fit_get_info(memory_info_t* info);
+ void first_fit_debug_print();
+ int first_fit_check_integrity();
++void first_fit_collect_stats(mm_stats_t *stats);
+ 
+-#endif // _FIRST_FIT_H_
+\ No newline at end of file
++#endif // _FIRST_FIT_H_
+diff --git a/Kernel/include/memory_manager.h b/Kernel/include/memory_manager.h
+index 401a3f0..6298800 100644
+--- a/Kernel/include/memory_manager.h
++++ b/Kernel/include/memory_manager.h
+@@ -3,6 +3,7 @@
+ 
+ #include <stdint.h>
+ #include <stddef.h>
++#include "mm_stats.h"
+ 
+ // Estructura para informacion de memoria
+ typedef struct {
+@@ -19,9 +20,10 @@ void* mm_malloc(size_t size);
+ void mm_free(void* ptr);
+ void mm_get_info(memory_info_t* info);
+ void mm_debug_print();
++void mm_collect_stats(mm_stats_t *stats);
+ 
+ // Para debugging y testing
+ int mm_check_integrity();
+ void mm_print_blocks();
+ 
+-#endif // _MEMORY_MANAGER_H_
+\ No newline at end of file
++#endif // _MEMORY_MANAGER_H_
+diff --git a/Kernel/include/syscalls.h b/Kernel/include/syscalls.h
+index be60719..984a98a 100644
+--- a/Kernel/include/syscalls.h
++++ b/Kernel/include/syscalls.h
+@@ -3,6 +3,7 @@
+ 
+ #include <stdint.h>
+ #include "sched.h"
++#include "mm_stats.h"
+ 
+ // Declaraciones de las llamadas al sistema expuestas a userland
+ 
+@@ -19,6 +20,7 @@ int      sys_sem_wait(int sem_id);
+ int      sys_sem_post(int sem_id);
+ int      sys_sem_close(int sem_id);
+ int      sys_sem_unlink(const char *name);
++int      sys_mm_get_stats(mm_stats_t *stats);
+ 
+ // Pipes (Hito 5)
+ int      sys_pipe_open(const char *name, int flags);  // flags: 1=R, 2=W, 3=RW
+diff --git a/Kernel/interrupt/sysCallDispatcher.c b/Kernel/interrupt/sysCallDispatcher.c
+index bb86805..9c92d9a 100644
+--- a/Kernel/interrupt/sysCallDispatcher.c
++++ b/Kernel/interrupt/sysCallDispatcher.c
+@@ -18,7 +18,7 @@
+ #define STDIN 0
+ #define STDOUT 1
+ #define STDERR 2
+-#define SYS_CALLS_QTY 45
++#define SYS_CALLS_QTY 47
+ 
+ extern uint8_t hasregisterInfo;
+ extern const uint64_t registerInfo[17];
+@@ -329,6 +329,8 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
+         return sys_dup2((int)rdi, (int)rsi);
+     case 45:
+         return sys_create_process_ex((void (*)(int, char**))rdi, (int)rsi, (char**)rdx, (const char*)r10, (uint8_t)r8, (int)r9);
++    case 46:
++        return sys_mm_get_stats((mm_stats_t*)rdi);
+     default:
+         return 0;
+     }
+diff --git a/Kernel/memory_manager.c b/Kernel/memory_manager.c
+index ad03d1a..b484fb2 100644
+--- a/Kernel/memory_manager.c
++++ b/Kernel/memory_manager.c
+@@ -68,4 +68,15 @@ int mm_check_integrity() {
+ #else
+     return first_fit_check_integrity();
+ #endif
+-}
+\ No newline at end of file
++}
++
++void mm_collect_stats(mm_stats_t *stats) {
++    if (stats == NULL) {
++        return;
++    }
++#ifdef USE_BUDDY_SYSTEM
++    buddy_collect_stats(stats);
++#else
++    first_fit_collect_stats(stats);
++#endif
++}
+diff --git a/Kernel/syscalls.c b/Kernel/syscalls.c
+index 92642fe..973be52 100644
+--- a/Kernel/syscalls.c
++++ b/Kernel/syscalls.c
+@@ -4,6 +4,12 @@
+ #include "include/interrupts.h"
+ #include "include/pipe.h"
+ #include "include/fd.h"
++#include "include/memory_manager.h"
++#include "include/lib.h"
++
++#ifndef EINVAL
++#define EINVAL 22
++#endif
+ 
+ // Implementación de cada syscall expuesta a userland
+ 
+@@ -69,6 +75,18 @@ uint64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count) {
+     return (uint64_t)proc_snapshot(buffer, (int)max_count);
+ }
+ 
++int sys_mm_get_stats(mm_stats_t *user_stats) {
++    if (user_stats == NULL) {
++        return -EINVAL;
++    }
++
++    mm_stats_t kstats;
++    mm_collect_stats(&kstats);
++
++    memcpy(user_stats, &kstats, sizeof(kstats));
++    return 0;
++}
++
+ static ksem_t *sem_handles[KSEM_HANDLE_MAX] = {0}; // Tabla de handles estilo POSIX
+ 
+ // Helpers locales para proteger la tabla de handles
+diff --git a/Kernel/include/mm_stats.h b/Kernel/include/mm_stats.h
+new file mode 100644
+index 0000000..c4d1001
+--- /dev/null
++++ b/Kernel/include/mm_stats.h
+@@ -0,0 +1,38 @@
++#ifndef MM_STATS_H
++#define MM_STATS_H
++
++#include <stdint.h>
++
++#define MM_NAME_MAX            16
++#define MM_MAX_ORDER           20
++#define MM_MAX_SIMPLE_BLOCKS   32
++
++typedef struct mm_order_info {
++    uint32_t order;
++    uint64_t block_size;
++    uint64_t free_count;
++} mm_order_info_t;
++
++typedef struct mm_block_info {
++    uint64_t addr;
++    uint64_t size;
++} mm_block_info_t;
++
++typedef struct mm_stats {
++    char     mm_name[MM_NAME_MAX];
++    uint64_t heap_total;
++    uint64_t used_bytes;
++    uint64_t free_bytes;
++    uint64_t free_blocks;
++    uint64_t largest_free;
++    uint8_t  has_buddy;
++    uint8_t  max_order;
++    mm_order_info_t orders[MM_MAX_ORDER];
++    uint64_t heap_base;
++    uint64_t heap_end;
++    uint32_t freelist_count;
++    uint32_t freelist_truncated;
++    mm_block_info_t freelist[MM_MAX_SIMPLE_BLOCKS];
++} mm_stats_t;
++
++#endif /* MM_STATS_H */

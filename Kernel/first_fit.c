@@ -1,6 +1,33 @@
 #include "first_fit.h"
 #include "naiveConsole.h"
+#include "interrupts.h"
 #include <lib.h>
+
+static uint64_t mm_irq_save(void) {
+    uint64_t flags;
+    __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
+    _cli();
+    return flags;
+}
+
+static void mm_irq_restore(uint64_t flags) {
+    if (flags & (1ULL << 9)) {
+        _sti();
+    }
+}
+
+static void mm_stats_set_name(mm_stats_t *stats, const char *name) {
+    if (stats == NULL || name == NULL) {
+        return;
+    }
+    uint64_t i = 0;
+    for (; i < MM_NAME_MAX - 1 && name[i] != 0; i++) {
+        stats->mm_name[i] = name[i];
+    }
+    if (i < MM_NAME_MAX) {
+        stats->mm_name[i] = 0;
+    }
+}
 
 // Variables globales para el heap
 static memory_block_t* heap_start = NULL;
@@ -299,6 +326,66 @@ int first_fit_check_integrity() {
         
         current = current->next;
     }
-    
+
     return errors == 0;
+}
+
+void first_fit_collect_stats(mm_stats_t *stats) {
+    if (stats == NULL) {
+        return;
+    }
+
+    memset(stats, 0, sizeof(*stats));
+    mm_stats_set_name(stats, "simple");
+    stats->has_buddy = 0;
+
+    if (!initialized || heap_start == NULL) {
+        stats->heap_total = 0;
+        return;
+    }
+
+    uint64_t flags = mm_irq_save();
+
+    memory_block_t *current = heap_start;
+    uint64_t free_bytes = 0;
+    uint64_t free_blocks = 0;
+    uint32_t captured = 0;
+    uint32_t truncated = 0;
+
+    while (current != NULL) {
+        if (current->is_free) {
+            free_bytes += current->size;
+            free_blocks++;
+            if (current->size > stats->largest_free) {
+                stats->largest_free = current->size;
+            }
+            if (captured < MM_MAX_SIMPLE_BLOCKS) {
+                stats->freelist[captured].addr = (uint64_t)current;
+                stats->freelist[captured].size = current->size;
+                captured++;
+            } else {
+                truncated++;
+            }
+        }
+        current = current->next;
+    }
+
+    mm_irq_restore(flags);
+
+    stats->heap_total = total_heap_size;
+    stats->free_bytes = free_bytes;
+    if (stats->heap_total >= stats->free_bytes) {
+        stats->used_bytes = stats->heap_total - stats->free_bytes;
+    } else {
+        stats->used_bytes = 0;
+        stats->free_bytes = stats->heap_total;
+    }
+    stats->free_blocks = free_blocks;
+    stats->freelist_count = captured;
+    stats->freelist_truncated = truncated;
+    if (stats->largest_free > stats->free_bytes) {
+        stats->largest_free = stats->free_bytes;
+    }
+    stats->heap_base = (uint64_t)heap_start;
+    stats->heap_end = (uint64_t)heap_end;
 }

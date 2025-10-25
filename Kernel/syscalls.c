@@ -4,6 +4,12 @@
 #include "include/interrupts.h"
 #include "include/pipe.h"
 #include "include/fd.h"
+#include "include/memory_manager.h"
+#include "include/lib.h"
+
+#ifndef EINVAL
+#define EINVAL 22
+#endif
 
 // Implementación de cada syscall expuesta a userland
 
@@ -67,6 +73,18 @@ uint64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count) {
     }
 
     return (uint64_t)proc_snapshot(buffer, (int)max_count);
+}
+
+int sys_mm_get_stats(mm_stats_t *user_stats) {
+    if (user_stats == NULL) {
+        return -EINVAL;
+    }
+
+    mm_stats_t kstats;
+    mm_collect_stats(&kstats);
+
+    memcpy(user_stats, &kstats, sizeof(kstats));
+    return 0;
 }
 
 static ksem_t *sem_handles[KSEM_HANDLE_MAX] = {0}; // Tabla de handles estilo POSIX

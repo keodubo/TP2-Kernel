@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "mm_stats.h"
 
 // Estructura para informacion de memoria
 typedef struct {
@@ -19,6 +20,7 @@ void* mm_malloc(size_t size);
 void mm_free(void* ptr);
 void mm_get_info(memory_info_t* info);
 void mm_debug_print();
+void mm_collect_stats(mm_stats_t *stats);
 
 // Para debugging y testing
 int mm_check_integrity();

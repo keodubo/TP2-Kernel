@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "sched.h"
+#include "mm_stats.h"
 
 // Declaraciones de las llamadas al sistema expuestas a userland
 
@@ -19,6 +20,7 @@ int      sys_sem_wait(int sem_id);
 int      sys_sem_post(int sem_id);
 int      sys_sem_close(int sem_id);
 int      sys_sem_unlink(const char *name);
+int      sys_mm_get_stats(mm_stats_t *stats);
 
 // Pipes (Hito 5)
 int      sys_pipe_open(const char *name, int flags);  // flags: 1=R, 2=W, 3=RW

@@ -69,3 +69,14 @@ int mm_check_integrity() {
     return first_fit_check_integrity();
 #endif
 }
+
+void mm_collect_stats(mm_stats_t *stats) {
+    if (stats == NULL) {
+        return;
+    }
+#ifdef USE_BUDDY_SYSTEM
+    buddy_collect_stats(stats);
+#else
+    first_fit_collect_stats(stats);
+#endif
+}

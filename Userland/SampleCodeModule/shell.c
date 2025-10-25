@@ -36,6 +36,7 @@ extern void cat_main(int argc, char **argv);
 extern void wc_main(int argc, char **argv);
 extern void filter_main(int argc, char **argv);
 extern void loop_main(int argc, char **argv);
+extern void mem_main(int argc, char **argv);
 
 // Wrappers para tests con firma diferente
 static void test_processes_wrapper(int argc, char **argv) {
@@ -80,6 +81,54 @@ static void test_synchro_wrapper(int argc, char **argv) {
     test_synchro(count, args);
 }
 
+static char **clone_args(char **argv, int count) {
+    if (argv == NULL || count <= 0) {
+        return NULL;
+    }
+
+    char **copy = (char **)sys_malloc(sizeof(char *) * (count + 1));
+    if (copy == NULL) {
+        return NULL;
+    }
+
+    for (int i = 0; i < count; i++) {
+        const char *src = argv[i];
+        if (src == NULL) {
+            copy[i] = NULL;
+            continue;
+        }
+        int len = strlen(src);
+        char *dst = (char *)sys_malloc((uint64_t)(len + 1));
+        if (dst == NULL) {
+            for (int j = 0; j < i; j++) {
+                if (copy[j] != NULL) {
+                    sys_free(copy[j]);
+                }
+            }
+            sys_free(copy);
+            return NULL;
+        }
+        for (int j = 0; j <= len; j++) {
+            dst[j] = src[j];
+        }
+        copy[i] = dst;
+    }
+    copy[count] = NULL;
+    return copy;
+}
+
+static void free_cloned_args(char **argv, int count) {
+    if (argv == NULL) {
+        return;
+    }
+    for (int i = 0; i < count; i++) {
+        if (argv[i] != NULL) {
+            sys_free(argv[i]);
+        }
+    }
+    sys_free(argv);
+}
+
 // Tabla de comandos integrados
 typedef struct {
     const char *name;
@@ -117,7 +166,8 @@ static int cmd_help(int argc, char **argv) {
     printf("  wc - Word count\n");
     printf("  filter - Filter vowels\n");
     printf("  loop - Infinite loop\n");
-    
+    printf("  mem [-v] - Show memory usage\n");
+
     printf("\nUse '&' at the end to run in background\n");
     printf("Example: loop &\n");
     
@@ -281,9 +331,6 @@ static int tokenize(char *line, char **argv, int max_args) {
 static int launch_process(const char *name, char **argv, int is_background) {
     void (*entry)(int, char **) = NULL;
     
-    // Suprimir warning de parámetro no usado (reservado para expansión futura)
-    (void)argv;
-    
     // Mapeo de nombres a funciones
     if (strcmp(name, "test_processes") == 0) {
         entry = test_processes_wrapper;
@@ -308,21 +355,43 @@ static int launch_process(const char *name, char **argv, int is_background) {
     } else if (strcmp(name, "test_fg_bg") == 0) {
         extern void test_fg_bg_main(int, char **);
         entry = test_fg_bg_main;
+    } else if (strcmp(name, "mem") == 0) {
+        entry = mem_main;
     } else {
         printf("Unknown command: %s\n", name);
         return -1;
     }
-    
+
+    int argc_total = 0;
+    if (argv != NULL) {
+        while (argv[argc_total] != NULL) {
+            argc_total++;
+        }
+    }
+
+    int arg_count = (argc_total > 1) ? (argc_total - 1) : 0;
+    char **argv_copy = NULL;
+    if (arg_count > 0) {
+        argv_copy = clone_args(&argv[1], arg_count);
+        if (argv_copy == NULL) {
+            printf("Failed to allocate arguments\n");
+            return -1;
+        }
+    }
+
     // Crear el proceso como background o foreground
     // Usar la nueva syscall que permite especificar el flag fg/bg
     int is_fg = is_background ? 0 : 1;
-    int64_t pid = sys_create_process_ex(entry, 0, NULL, name, 2, is_fg);
-    
+    int64_t pid = sys_create_process_ex(entry, arg_count, argv_copy, name, 2, is_fg);
+
     if (pid < 0) {
         printf("Failed to create process\n");
+        if (argv_copy != NULL) {
+            free_cloned_args(argv_copy, arg_count);
+        }
         return -1;
     }
-    
+
     if (is_background) {
         // Agregar a la lista de jobs y no esperar
         jobs_add(pid, name);
@@ -331,6 +400,9 @@ static int launch_process(const char *name, char **argv, int is_background) {
         // Foreground: esperar a que termine
         int status = 0;
         int waited = sys_wait_pid(pid, &status);
+        if (argv_copy != NULL) {
+            free_cloned_args(argv_copy, arg_count);
+        }
         if (waited > 0) {
             // Proceso terminado
             return 0;

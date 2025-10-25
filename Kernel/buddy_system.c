@@ -1,6 +1,33 @@
 #include "buddy_system.h"
 #include "naiveConsole.h"
+#include "interrupts.h"
 #include <lib.h>
+
+static uint64_t mm_irq_save(void) {
+    uint64_t flags;
+    __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
+    _cli();
+    return flags;
+}
+
+static void mm_irq_restore(uint64_t flags) {
+    if (flags & (1ULL << 9)) {
+        _sti();
+    }
+}
+
+static void mm_stats_set_name(mm_stats_t *stats, const char *name) {
+    if (stats == NULL || name == NULL) {
+        return;
+    }
+    uint64_t i = 0;
+    for (; i < MM_NAME_MAX - 1 && name[i] != 0; i++) {
+        stats->mm_name[i] = name[i];
+    }
+    if (i < MM_NAME_MAX) {
+        stats->mm_name[i] = 0;
+    }
+}
 
 // Estructura de nodo libre en las listas de bloques
 typedef struct free_node {
@@ -336,4 +363,78 @@ int buddy_check_integrity(void) {
     }
     
     return (counted_free == stat_free_blocks) ? 1 : 0;
+}
+
+void buddy_collect_stats(mm_stats_t *stats) {
+    if (stats == NULL) {
+        return;
+    }
+
+    memset(stats, 0, sizeof(*stats));
+    mm_stats_set_name(stats, "buddy");
+
+    if (!initialized) {
+        return;
+    }
+
+    uint64_t flags = mm_irq_save();
+
+    stats->heap_total = stat_total;
+    stats->used_bytes = stat_used;
+    stats->free_bytes = (stat_total >= stat_used) ? (stat_total - stat_used) : 0;
+    stats->free_blocks = stat_free_blocks;
+    stats->has_buddy = 1;
+    stats->heap_base = (uint64_t)region_base;
+    stats->heap_end = (uint64_t)region_end;
+
+    uint8_t relative_max = 0;
+    if (max_order >= BUDDY_MIN_ORDER) {
+        relative_max = (uint8_t)(max_order - BUDDY_MIN_ORDER);
+    }
+    if (relative_max >= MM_MAX_ORDER) {
+        relative_max = MM_MAX_ORDER - 1;
+    }
+    stats->max_order = relative_max;
+
+    uint64_t computed_free = 0;
+    for (unsigned order = BUDDY_MIN_ORDER; order <= max_order; order++) {
+        uint64_t block_size = 1ULL << order;
+        uint64_t count = 0;
+        free_node_t *node = free_lists[order];
+        while (node != NULL) {
+            count++;
+            node = node->next;
+        }
+
+        unsigned idx = 0;
+        if (order >= BUDDY_MIN_ORDER) {
+            idx = (unsigned)(order - BUDDY_MIN_ORDER);
+        }
+        if (idx < MM_MAX_ORDER) {
+            stats->orders[idx].order = idx;
+            stats->orders[idx].block_size = block_size;
+            stats->orders[idx].free_count = count;
+        }
+
+        if (count > 0 && block_size > stats->largest_free) {
+            stats->largest_free = block_size;
+        }
+        computed_free += count * block_size;
+    }
+
+    mm_irq_restore(flags);
+
+    if (computed_free < stats->free_bytes) {
+        stats->free_bytes = computed_free;
+        if (stats->heap_total >= stats->free_bytes) {
+            stats->used_bytes = stats->heap_total - stats->free_bytes;
+        }
+    } else if (computed_free > stats->free_bytes && stats->heap_total >= computed_free) {
+        stats->free_bytes = computed_free;
+        stats->used_bytes = stats->heap_total - stats->free_bytes;
+    }
+
+    if (stats->largest_free > stats->free_bytes) {
+        stats->largest_free = stats->free_bytes;
+    }
 }

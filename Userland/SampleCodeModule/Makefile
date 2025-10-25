@@ -11,10 +11,10 @@ OBJECTS_ASM=$(SOURCES_ASM:asm/%.asm=obj/%.asm.o)
 all: $(MODULE) $(MODULE_ELF)
 
 $(MODULE): $(SOURCES) $(SOURCES_TESTS) $(SOURCES_SH) $(OBJECTS_ASM)
-	$(GCC) $(GCCFLAGS) -I./include -I./tests -I./sh -T sampleCodeModule.ld _loader.c $(OBJECTS_ASM) $(SOURCES) $(SOURCES_TESTS) $(SOURCES_SH) -o ../$(MODULE)
+	$(GCC) $(GCCFLAGS) -I./include -I../include -I./tests -I./sh -T sampleCodeModule.ld _loader.c $(OBJECTS_ASM) $(SOURCES) $(SOURCES_TESTS) $(SOURCES_SH) -o ../$(MODULE)
 
 $(MODULE_ELF): $(SOURCES) $(SOURCES_TESTS) $(SOURCES_SH) $(OBJECTS_ASM)
-	$(GCC) $(GCCFLAGS) -I./include -I./tests -I./sh -T sampleCodeModule.ld -Wl,--oformat=elf64-x86-64 _loader.c $(OBJECTS_ASM) $(SOURCES) $(SOURCES_TESTS) $(SOURCES_SH) -o ../$(MODULE_ELF)
+	$(GCC) $(GCCFLAGS) -I./include -I../include -I./tests -I./sh -T sampleCodeModule.ld -Wl,--oformat=elf64-x86-64 _loader.c $(OBJECTS_ASM) $(SOURCES) $(SOURCES_TESTS) $(SOURCES_SH) -o ../$(MODULE_ELF)
 
 obj/%.asm.o : asm/%.asm
 	mkdir -p obj

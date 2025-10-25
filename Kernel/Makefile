@@ -58,6 +58,10 @@ ifneq ($(MM_FLAG),)
 	GCCFLAGS += $(MM_FLAG)
 endif
 
+ifneq ($(findstring USE_BUDDY_SYSTEM,$(MM_FLAG)),)
+	GCCFLAGS += -DCONFIG_MM_BUDDY
+endif
+
 all: $(KERNEL) $(KERNEL_ELF)
 
 $(KERNEL): $(STATICLIBS) $(ALL_OBJECTS)
