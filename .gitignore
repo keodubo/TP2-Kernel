@@ -41,6 +41,4 @@ Kernel/kernel.bin
 .bash_history
 .gdb_history
 
-# Scripts de desarrollo local (opcional - podrías querer commitear debug.sh)
-# debug.sh
-Userland/SampleCodeModule/.DS_Store
+

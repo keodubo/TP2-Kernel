@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <sys_calls.h>
 #include <colors.h>
-#include <eliminator.h>
 #include <kitty.h>
 #include <ascii.h>
 #include "../tests/test_util.h"
@@ -266,7 +265,6 @@ void cmd_zeroDiv(void);
 void cmd_invOpcode(void);
 void cmd_exit(void);
 void cmd_ascii(void);
-void cmd_eliminator(void);
 void cmd_test_mm(void);
 void cmd_test_processes(void);
 void cmd_test_priority(void);
@@ -319,9 +317,6 @@ void printHelp()
 	printsColor("\n\n", MAX_BUFF, WHITE);
 	printsColor("Background execution:\n", MAX_BUFF, GREEN);
 	printsColor("  cmd &  - Execute command in background (no wait)\n", MAX_BUFF, CYAN);
-	printsColor("           Shell returns immediately to prompt\n", MAX_BUFF, CYAN);
-	printsColor("           Background jobs don't get keyboard input\n", MAX_BUFF, CYAN);
-	printsColor("           Use 'jobs' to list running background processes\n\n", MAX_BUFF, CYAN);
 	printsColor("Pipe examples:\n", MAX_BUFF, GREEN);
 	printsColor("  echo hola | wc         - count lines in 'hola'\n", MAX_BUFF, CYAN);
 	printsColor("  echo \"hola mundo\" | wc  - count lines with spaces\n", MAX_BUFF, CYAN);
@@ -329,7 +324,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "eliminator", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs", "sh"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "cat", "wc", "filter", "echo", "jobs", "sh"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -341,7 +336,6 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_invOpcode,
 	cmd_exit,
 	cmd_ascii,
-	cmd_eliminator,
 	cmd_test_mm,
 	cmd_test_processes,
 	cmd_test_priority,
@@ -866,32 +860,7 @@ void handleSpecialCommands(char c)
 	}
 }
 
-void cmd_eliminator()
-{
-	int numPlayers;
-	if (parameter[0] == '\0')
-	{
-		numPlayers = 1;
-	}
-	else
-	{
-		numPlayers = atoi(parameter);
-	}
 
-	if (numPlayers == 1 || numPlayers == 2 || parameter[0] == '\0')
-	{
-		int playAgain = 1;
-		while (playAgain)
-		{
-			// playAgain because we need to know if the game should be restarted
-			playAgain = eliminator(numPlayers);
-		}
-	}
-	else
-	{
-		prints("\nERROR: Invalid number of players. Only 1 or 2 players allowed.", MAX_BUFF);
-	}
-}
 
 void cmd_test_mm()
 {
