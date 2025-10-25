@@ -2,6 +2,7 @@
 #include "include/memory_manager.h"
 #include "include/lib.h"
 #include "include/tty.h"
+#include "include/fd.h"
 
 // Gestion de procesos (PCB)
 // Implementa tabla de procesos, creacion, destruccion, comunicacion
@@ -90,6 +91,7 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     proc->pending_exit_valid = false;
     proc->exited = false;
     proc->zombie_reapable = false;
+    proc->fd_table = NULL;
 
     pcb_t *parent = sched_current();
     if (parent != NULL) {
@@ -103,8 +105,31 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     }
 
     setup_stack(proc);
+
+    proc->fd_table = fd_table_create();
+    if (proc->fd_table == NULL) {
+        mm_free(proc->kstack_base);
+        proc->kstack_base = NULL;
+        release_slot(proc);
+        return -1;
+    }
+
     if (parent != NULL) {
+        if (parent->fd_table != NULL) {
+            if (fd_table_clone(proc->fd_table, parent->fd_table) < 0) {
+                fd_table_destroy(proc->fd_table);
+                proc->fd_table = NULL;
+                mm_free(proc->kstack_base);
+                proc->kstack_base = NULL;
+                release_slot(proc);
+                return -1;
+            }
+        } else {
+            fd_table_attach_std(proc->fd_table);
+        }
         link_child(parent, proc);
+    } else {
+        fd_table_attach_std(proc->fd_table);
     }
     insert_proc(proc);
 
@@ -146,11 +171,15 @@ void proc_exit(int code) {
     proc->state = EXITED;
     proc->ticks_left = 0;
     proc->exited = true;
-    proc->waiting_for = 0;
-    proc->waiter_head = NULL;
-    detach_children(proc);
-    remove_proc(proc);
-    notify_parent_exit(proc);
+   proc->waiting_for = 0;
+   proc->waiter_head = NULL;
+   detach_children(proc);
+   remove_proc(proc);
+   notify_parent_exit(proc);
+    if (proc->fd_table != NULL) {
+        fd_table_destroy(proc->fd_table);
+        proc->fd_table = NULL;
+    }
     cleanup_wait_results(proc);
     enqueue_zombie(proc);
 
@@ -300,6 +329,10 @@ int proc_kill(int pid) {
     detach_children(target);
     remove_proc(target);
     notify_parent_exit(target);
+    if (target->fd_table != NULL) {
+        fd_table_destroy(target->fd_table);
+        target->fd_table = NULL;
+    }
     cleanup_wait_results(target);
     enqueue_zombie(target);
     collect_zombies();
@@ -375,6 +408,10 @@ static pcb_t *allocate_slot(void) {
 static void release_slot(pcb_t *proc) {
     if (proc == NULL) {
         return;
+    }
+    if (proc->fd_table != NULL) {
+        fd_table_destroy(proc->fd_table);
+        proc->fd_table = NULL;
     }
     cleanup_wait_results(proc);
     proc->wait_res_head = NULL;

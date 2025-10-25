@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 struct wait_result;
+struct fd_table;
 
 typedef enum {
     NEW,
@@ -72,10 +73,11 @@ typedef struct pcb_t {
     struct wait_result *wait_res_head;
     struct wait_result *wait_res_tail;
     int pending_exit_pid;
-    int pending_exit_code;
+   int pending_exit_code;
     bool pending_exit_valid;
     bool exited;
     bool zombie_reapable;
+    struct fd_table *fd_table;
 } pcb_t;
 
 typedef struct proc_info_t {

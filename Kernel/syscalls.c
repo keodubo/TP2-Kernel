@@ -175,6 +175,11 @@ int sys_pipe_open(const char *name, int flags) {
     if (name == NULL) {
         return -1;
     }
+
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
+        return -1;
+    }
     
     bool for_read = (flags & 1) != 0;
     bool for_write = (flags & 2) != 0;
@@ -187,28 +192,50 @@ int sys_pipe_open(const char *name, int flags) {
     if (kpipe_open(name, for_read, for_write, &p) < 0) {
         return -1;
     }
-    
-    return fd_alloc(FD_PIPE, p, for_read, for_write, &PIPE_OPS);
+
+    file_t *file = file_create(FD_PIPE, p, for_read, for_write, &PIPE_OPS);
+    if (file == NULL) {
+        kpipe_close(p, for_read, for_write);
+        return -1;
+    }
+
+    int fd = fd_table_allocate(cur->fd_table, file);
+    if (fd < 0) {
+        file_release(file);
+    }
+    return fd;
 }
 
 int sys_pipe_close(int fd) {
-    return fd_close(fd);
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
+        return -1;
+    }
+    return fd_table_close(cur->fd_table, fd);
 }
 
 int sys_pipe_read(int fd, void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || !f->can_read || f->type != FD_PIPE) {
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
         return -1;
     }
-    return kpipe_read((kpipe_t *)f->ptr, buf, n);
+    file_t *file = fd_table_get(cur->fd_table, fd);
+    if (file == NULL || file->type != FD_PIPE || !file->can_read || file->ops == NULL || file->ops->read == NULL) {
+        return -1;
+    }
+    return file->ops->read(file, buf, n);
 }
 
 int sys_pipe_write(int fd, const void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || !f->can_write || f->type != FD_PIPE) {
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
         return -1;
     }
-    return kpipe_write((kpipe_t *)f->ptr, buf, n);
+    file_t *file = fd_table_get(cur->fd_table, fd);
+    if (file == NULL || file->type != FD_PIPE || !file->can_write || file->ops == NULL || file->ops->write == NULL) {
+        return -1;
+    }
+    return file->ops->write(file, buf, n);
 }
 
 int sys_pipe_unlink(const char *name) {
@@ -220,25 +247,41 @@ int sys_pipe_unlink(const char *name) {
 // ========================================
 // Estas wrappers invocan a la vtable del descriptor solicitado
 int sys_read(int fd, void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || f->ops == NULL || f->ops->read == NULL) {
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
         return -1;
     }
-    return f->ops->read(fd, buf, n);
+    file_t *file = fd_table_get(cur->fd_table, fd);
+    if (file == NULL || file->ops == NULL || file->ops->read == NULL) {
+        return -1;
+    }
+    return file->ops->read(file, buf, n);
 }
 
 int sys_write(int fd, const void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || f->ops == NULL || f->ops->write == NULL) {
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
         return -1;
     }
-    return f->ops->write(fd, buf, n);
+    file_t *file = fd_table_get(cur->fd_table, fd);
+    if (file == NULL || file->ops == NULL || file->ops->write == NULL) {
+        return -1;
+    }
+    return file->ops->write(file, buf, n);
 }
 
 int sys_close(int fd) {
-    return fd_close(fd);
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
+        return -1;
+    }
+    return fd_table_close(cur->fd_table, fd);
 }
 
 int sys_dup2(int oldfd, int newfd) {
-    return fd_dup2(oldfd, newfd);
+    pcb_t *cur = sched_current();
+    if (cur == NULL || cur->fd_table == NULL) {
+        return -1;
+    }
+    return fd_table_dup2(cur->fd_table, oldfd, newfd);
 }

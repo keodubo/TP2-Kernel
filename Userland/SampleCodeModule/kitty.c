@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <sys_calls.h>
 #include <colors.h>
 #include <kitty.h>
@@ -35,8 +36,10 @@ int filter_main(int argc, char **argv);
 // Helpers para pipelines y parsing de comandos
 static void sanitize_echo_text(const char *src, char *dst, int max_len);
 static int parse_command_line(const char *input, char *out_cmd, char *out_param);
-static int run_pipeline_command(const char *cmd, const char *param);
 static void echo_output(const char *param, int interactive);
+static int run_pipeline_command(const char *cmd, const char *param);
+static int has_pipe(char *str);
+static void execute_pipe(char *left_line, char *right_line);
 
 static void format_hex64(uint64_t value, char out[17]);
 static void print_hex64(uint64_t value);
@@ -284,6 +287,7 @@ void cmd_wc(void);
 void cmd_filter(void);
 void cmd_echo(void);
 void cmd_jobs(void);
+void printPrompt(void);
 
 void printHelp()
 {
@@ -498,6 +502,15 @@ static void echo_output(const char *param, int interactive) {
 	sys_write_fd(SHELL_STDOUT, &newline, 1);
 }
 
+static int has_pipe(char *str) {
+	for (int i = 0; str[i] != '\0'; i++) {
+		if (str[i] == '|') {
+			return i;
+		}
+	}
+	return -1;
+}
+
 // Ejecuta la implementación real de cada comando soportado en pipelines
 static int run_pipeline_command(const char *cmd, const char *param) {
 	if (cmd == NULL || cmd[0] == 0) {
@@ -528,16 +541,7 @@ static int run_pipeline_command(const char *cmd, const char *param) {
 	return -1;
 }
 
-static int has_pipe(char *str) {
-	for (int i = 0; str[i] != '\0'; i++) {
-		if (str[i] == '|') {
-			return i;
-		}
-	}
-	return -1;
-}
-
-// Ejecuta dos comandos conectados por pipe reutilizando los mismos FDs
+// Ejecuta dos comandos conectados por un pipe
 static void execute_pipe(char *left_line, char *right_line) {
 	char left_cmd[MAX_BUFF + 1] = {0};
 	char left_param[MAX_BUFF + 1] = {0};
@@ -678,40 +682,43 @@ void newLine()
 	
 	// Detectar si hay pipe
 	int pipe_pos = has_pipe(line);
-	
 	if (pipe_pos >= 0) {
-		// Separar comandos
 		char left_cmd[MAX_BUFF] = {0};
 		char right_cmd[MAX_BUFF] = {0};
-		
+
 		int i;
 		for (i = 0; i < pipe_pos && line[i] != '\0'; i++) {
 			left_cmd[i] = line[i];
 		}
 		left_cmd[i] = '\0';
-		
-		// Saltar el pipe y espacios
+
 		i = pipe_pos + 1;
-		while (i < linePos && line[i] == ' ') i++;
-		
+		while (i < linePos && line[i] == ' ') {
+			i++;
+		}
+
 		int j = 0;
 		while (i < linePos && line[i] != '\0') {
 			right_cmd[j++] = line[i++];
 		}
 		right_cmd[j] = '\0';
-		
-		// Trim espacios
+
 		int len = strlen(left_cmd);
-		while (len > 0 && left_cmd[len-1] == ' ') {
+		while (len > 0 && left_cmd[len - 1] == ' ') {
 			left_cmd[--len] = '\0';
 		}
 		len = strlen(right_cmd);
-		while (len > 0 && right_cmd[len-1] == ' ') {
+		while (len > 0 && right_cmd[len - 1] == ' ') {
 			right_cmd[--len] = '\0';
 		}
-		
-		// Ejecutar con pipe
-		execute_pipe(left_cmd, right_cmd);
+
+		if (left_cmd[0] == '\0' || right_cmd[0] == '\0') {
+			printsColor("\n[pipe] Invalid command syntax\n", MAX_BUFF, RED);
+		} else if (has_pipe(right_cmd) >= 0) {
+			printsColor("\n[pipe] Only single '|' supported\n", MAX_BUFF, RED);
+		} else {
+			execute_pipe(left_cmd, right_cmd);
+		}
 	} else {
 		// Ejecución normal sin pipe
 		int i = checkLine();

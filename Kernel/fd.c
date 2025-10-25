@@ -6,16 +6,16 @@
 #include "include/interrupts.h"
 #include "include/errno.h"
 #include "include/sched.h"
+#include "include/memory_manager.h"
 
 // Archivo: fd.c
-// Propósito: Gestor simple de file descriptors compartido entre kernel y userland
-// Resumen: Tabla global de FDs, adaptadores para TTY y pipes, y helpers para
-//          operaciones de lectura/escritura/cierre.
+// Propósito: Gestor de file descriptors per-proceso con objetos compartidos
+// Resumen: Implementa files con refcount, tablas por proceso y operaciones
+//          genéricas read/write/close para TTY y pipes.
 
-// Gestor simple de file descriptors compartido entre kernel y userland
-// Tabla global simple de FDs
-// TODO: migrar a per-process cuando se implemente gestión completa de procesos
-static kfd_t fd_table[FD_MAX];
+static file_t *stdin_file = NULL;
+static file_t *stdout_file = NULL;
+static file_t *stderr_file = NULL;
 
 // Helpers mínimos para ejecutar secciones críticas breves
 static uint64_t irq_save_local(void) {
@@ -31,41 +31,36 @@ static void irq_restore_local(uint64_t flags) {
     }
 }
 
-// Adaptadores entre FDs y backend de TTY
-static int fd_tty_read(int fd, void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || !f->can_read || f->ptr == NULL) {
+// Adaptadores entre files y backend de TTY
+static int fd_tty_read(file_t *file, void *buf, int n) {
+    if (file == NULL || !file->can_read || file->ptr == NULL || buf == NULL || n <= 0) {
         return -1;
     }
-    
-    // Verificar si el proceso actual puede leer de la TTY (solo FG)
+
     pcb_t *cur = sched_current();
     if (cur == NULL) {
         return -1;
     }
-    
-    // Solo el proceso foreground puede leer de stdin
-    if (fd == FD_STDIN && !tty_can_read(cur->pid)) {
+
+    if (file->fg_read_guard && !tty_can_read(cur->pid)) {
         return E_BG_INPUT;
     }
-    
-    return tty_read((tty_t *)f->ptr, buf, n);
+
+    return tty_read((tty_t *)file->ptr, buf, n);
 }
 
-static int fd_tty_write(int fd, const void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || !f->can_write || f->ptr == NULL) {
+static int fd_tty_write(file_t *file, const void *buf, int n) {
+    if (file == NULL || !file->can_write || file->ptr == NULL || buf == NULL || n <= 0) {
         return -1;
     }
-    return tty_write((tty_t *)f->ptr, buf, n);
+    return tty_write((tty_t *)file->ptr, buf, n);
 }
 
-static int fd_tty_close(int fd) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || f->ptr == NULL) {
+static int fd_tty_close(file_t *file) {
+    if (file == NULL || file->ptr == NULL) {
         return -1;
     }
-    return tty_close((tty_t *)f->ptr);
+    return tty_close((tty_t *)file->ptr);
 }
 
 static const struct fd_ops TTY_OPS = {
@@ -75,98 +70,209 @@ static const struct fd_ops TTY_OPS = {
 };
 
 void fd_init(void) {
-    // Limpiar la tabla global; cada entrada se completa vía fd_alloc
-    for (int i = 0; i < FD_MAX; i++) {
-        fd_table[i].type = FD_NONE;
-        fd_table[i].ops = NULL;
-        fd_table[i].ptr = NULL;
-        fd_table[i].can_read = false;
-        fd_table[i].can_write = false;
-        fd_table[i].used = false;
-    }
+    stdin_file = NULL;
+    stdout_file = NULL;
+    stderr_file = NULL;
 }
 
 void fd_init_std(void) {
-    // Inicializar stdin/stdout/stderr apuntando a la TTY principal
     tty_t *tty = tty_default();
     if (tty == NULL) {
         return;
     }
 
-    if (!fd_table[FD_STDIN].used) {
-        fd_alloc(FD_TTY, tty, true, false, &TTY_OPS);
+    if (stdin_file == NULL) {
+        stdin_file = file_create(FD_TTY, tty, true, false, &TTY_OPS);
+        if (stdin_file != NULL) {
+            stdin_file->fg_read_guard = true;
+        }
     }
-    if (!fd_table[FD_STDOUT].used) {
-        fd_alloc(FD_TTY, tty, false, true, &TTY_OPS);
+    if (stdout_file == NULL) {
+        stdout_file = file_create(FD_TTY, tty, false, true, &TTY_OPS);
     }
-    if (!fd_table[FD_STDERR].used) {
-        fd_alloc(FD_TTY, tty, false, true, &TTY_OPS);
+    if (stderr_file == NULL) {
+        stderr_file = file_create(FD_TTY, tty, false, true, &TTY_OPS);
     }
 }
 
-int fd_alloc(fd_type_t type, void *ptr, bool rd, bool wr, const struct fd_ops *ops) {
-    // Reserva el primer slot disponible para el recurso indicado
+file_t *file_create(fd_type_t type, void *ptr, bool rd, bool wr, const struct fd_ops *ops) {
     if (ptr == NULL || ops == NULL) {
+        return NULL;
+    }
+
+    file_t *file = (file_t *)mm_malloc(sizeof(file_t));
+    if (file == NULL) {
+        return NULL;
+    }
+
+    file->type = type;
+    file->ops = ops;
+    file->ptr = ptr;
+    file->can_read = rd;
+    file->can_write = wr;
+    file->fg_read_guard = false;
+    file->refcount = 1;
+    return file;
+}
+
+void file_ref(file_t *file) {
+    if (file == NULL) {
+        return;
+    }
+    uint64_t flags = irq_save_local();
+    file->refcount++;
+    irq_restore_local(flags);
+}
+
+void file_release(file_t *file) {
+    if (file == NULL) {
+        return;
+    }
+
+    int new_ref;
+    uint64_t flags = irq_save_local();
+    file->refcount--;
+    new_ref = file->refcount;
+    irq_restore_local(flags);
+
+    if (new_ref > 0) {
+        return;
+    }
+
+    if (file->ops != NULL && file->ops->close != NULL) {
+        file->ops->close(file);
+    }
+    mm_free(file);
+}
+
+fd_table_t *fd_table_create(void) {
+    fd_table_t *table = (fd_table_t *)mm_malloc(sizeof(fd_table_t));
+    if (table == NULL) {
+        return NULL;
+    }
+    for (int i = 0; i < FD_MAX; i++) {
+        table->entries[i] = NULL;
+    }
+    return table;
+}
+
+void fd_table_destroy(fd_table_t *table) {
+    if (table == NULL) {
+        return;
+    }
+    for (int i = 0; i < FD_MAX; i++) {
+        if (table->entries[i] != NULL) {
+            file_release(table->entries[i]);
+            table->entries[i] = NULL;
+        }
+    }
+    mm_free(table);
+}
+
+int fd_table_clone(fd_table_t *dst, fd_table_t *src) {
+    if (dst == NULL) {
         return -1;
     }
-    
+
     for (int i = 0; i < FD_MAX; i++) {
-        if (!fd_table[i].used) {
-            fd_table[i].type = type;
-            fd_table[i].ops = ops;
-            fd_table[i].ptr = ptr;
-            fd_table[i].can_read = rd;
-            fd_table[i].can_write = wr;
-            fd_table[i].used = true;
+        dst->entries[i] = NULL;
+    }
+
+    if (src == NULL) {
+        fd_table_attach_std(dst);
+        return 0;
+    }
+
+    for (int i = 0; i < FD_MAX; i++) {
+        file_t *file = src->entries[i];
+        if (file != NULL) {
+            file_ref(file);
+            dst->entries[i] = file;
+        }
+    }
+    return 0;
+}
+
+void fd_table_attach_std(fd_table_t *table) {
+    if (table == NULL) {
+        return;
+    }
+
+    if (stdin_file != NULL) {
+        file_ref(stdin_file);
+        table->entries[FD_STDIN] = stdin_file;
+    }
+    if (stdout_file != NULL) {
+        file_ref(stdout_file);
+        table->entries[FD_STDOUT] = stdout_file;
+    }
+    if (stderr_file != NULL) {
+        file_ref(stderr_file);
+        table->entries[FD_STDERR] = stderr_file;
+    }
+}
+
+file_t *fd_table_get(fd_table_t *table, int fd) {
+    if (table == NULL || fd < 0 || fd >= FD_MAX) {
+        return NULL;
+    }
+    return table->entries[fd];
+}
+
+bool fd_table_can_read(fd_table_t *table, int fd) {
+    file_t *file = fd_table_get(table, fd);
+    return (file != NULL && file->can_read);
+}
+
+bool fd_table_can_write(fd_table_t *table, int fd) {
+    file_t *file = fd_table_get(table, fd);
+    return (file != NULL && file->can_write);
+}
+
+int fd_table_close(fd_table_t *table, int fd) {
+    if (table == NULL || fd < 0 || fd >= FD_MAX) {
+        return -1;
+    }
+    file_t *file = table->entries[fd];
+    if (file == NULL) {
+        return -1;
+    }
+    table->entries[fd] = NULL;
+    file_release(file);
+    return 0;
+}
+
+int fd_table_install(fd_table_t *table, int fd, file_t *file) {
+    if (table == NULL || file == NULL || fd < 0 || fd >= FD_MAX) {
+        return -1;
+    }
+    if (table->entries[fd] != NULL) {
+        file_release(table->entries[fd]);
+    }
+    table->entries[fd] = file;
+    return fd;
+}
+
+int fd_table_allocate(fd_table_t *table, file_t *file) {
+    if (table == NULL || file == NULL) {
+        return -1;
+    }
+    for (int i = 0; i < FD_MAX; i++) {
+        if (table->entries[i] == NULL) {
+            table->entries[i] = file;
             return i;
         }
     }
-    
-    return -1; // No hay slots disponibles
+    return -1;
 }
 
-kfd_t* fd_get(int fd) {
-    if (fd < 0 || fd >= FD_MAX) {
-        return NULL;
-    }
-    
-    if (!fd_table[fd].used) {
-        return NULL;
-    }
-    
-    return &fd_table[fd];
-}
-
-int fd_close(int fd) {
-    // Cerrar el descriptor y liberar el slot
-    if (fd < 0 || fd >= FD_MAX) {
+int fd_table_dup2(fd_table_t *table, int oldfd, int newfd) {
+    if (table == NULL || oldfd < 0 || oldfd >= FD_MAX || newfd < 0 || newfd >= FD_MAX) {
         return -1;
     }
-    
-    if (!fd_table[fd].used) {
-        return -1;
-    }
-    
-    // Llamar al close del ops si existe
-    int result = 0;
-    if (fd_table[fd].ops != NULL && fd_table[fd].ops->close != NULL) {
-        result = fd_table[fd].ops->close(fd);
-    }
-    
-    // Marcar slot como libre
-    fd_table[fd].type = FD_NONE;
-    fd_table[fd].ops = NULL;
-    fd_table[fd].ptr = NULL;
-    fd_table[fd].can_read = false;
-    fd_table[fd].can_write = false;
-    fd_table[fd].used = false;
-    
-    return result;
-}
 
-int fd_dup2(int oldfd, int newfd) {
-    // Clona oldfd sobre newfd, incrementando referencias si es un pipe
-    if (oldfd < 0 || oldfd >= FD_MAX || newfd < 0 || newfd >= FD_MAX) {
+    file_t *src = table->entries[oldfd];
+    if (src == NULL) {
         return -1;
     }
 
@@ -174,33 +280,11 @@ int fd_dup2(int oldfd, int newfd) {
         return newfd;
     }
 
-    kfd_t *src = fd_get(oldfd);
-    if (src == NULL) {
-        return -1;
+    if (table->entries[newfd] != NULL) {
+        file_release(table->entries[newfd]);
     }
 
-    if (fd_table[newfd].used) {
-        fd_close(newfd);
-    }
-
-    fd_table[newfd].type = src->type;
-    fd_table[newfd].ops = src->ops;
-    fd_table[newfd].ptr = src->ptr;
-    fd_table[newfd].can_read = src->can_read;
-    fd_table[newfd].can_write = src->can_write;
-    fd_table[newfd].used = true;
-
-    if (src->type == FD_PIPE && src->ptr != NULL) {
-        uint64_t flags = irq_save_local();
-        kpipe_t *p = (kpipe_t *)src->ptr;
-        if (src->can_read) {
-            p->readers++;
-        }
-        if (src->can_write) {
-            p->writers++;
-        }
-        irq_restore_local(flags);
-    }
-
+    file_ref(src);
+    table->entries[newfd] = src;
     return newfd;
 }

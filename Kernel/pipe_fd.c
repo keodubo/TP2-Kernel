@@ -4,28 +4,25 @@
 
 // Adaptadores para exponer los pipes a través de la interfaz de file descriptors
 
-static int fd_pipe_read(int fd, void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || !f->can_read || f->ptr == NULL) {
+static int fd_pipe_read(file_t *file, void *buf, int n) {
+    if (file == NULL || !file->can_read || file->ptr == NULL || buf == NULL || n <= 0) {
         return -1;
     }
-    return kpipe_read((kpipe_t *)f->ptr, buf, n);
+    return kpipe_read((kpipe_t *)file->ptr, buf, n);
 }
 
-static int fd_pipe_write(int fd, const void *buf, int n) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || !f->can_write || f->ptr == NULL) {
+static int fd_pipe_write(file_t *file, const void *buf, int n) {
+    if (file == NULL || !file->can_write || file->ptr == NULL || buf == NULL || n <= 0) {
         return -1;
     }
-    return kpipe_write((kpipe_t *)f->ptr, buf, n);
+    return kpipe_write((kpipe_t *)file->ptr, buf, n);
 }
 
-static int fd_pipe_close(int fd) {
-    kfd_t *f = fd_get(fd);
-    if (f == NULL || f->ptr == NULL) {
+static int fd_pipe_close(file_t *file) {
+    if (file == NULL || file->ptr == NULL) {
         return -1;
     }
-    return kpipe_close((kpipe_t *)f->ptr, f->can_read, f->can_write);
+    return kpipe_close((kpipe_t *)file->ptr, file->can_read, file->can_write);
 }
 
 const struct fd_ops PIPE_OPS = {
