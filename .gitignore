@@ -43,3 +43,4 @@ Kernel/kernel.bin
 
 # Scripts de desarrollo local (opcional - podrías querer commitear debug.sh)
 # debug.sh
+Userland/SampleCodeModule/.DS_Store

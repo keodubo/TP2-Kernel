@@ -96,22 +96,25 @@ int64_t my_unblock(uint64_t pid) {
 typedef struct {
   char name[32];
   int handle;
+  int owner_pid;
   int in_use;
 } sem_entry_t;
 
 static sem_entry_t sem_entries[16] = {0};
 
-static int find_sem_entry(const char *name) {
+static int find_sem_entry(const char *name, int owner_pid) {
   for (int i = 0; i < 16; i++) {
-    if (sem_entries[i].in_use && strcmp(sem_entries[i].name, name) == 0) {
+    if (sem_entries[i].in_use &&
+        sem_entries[i].owner_pid == owner_pid &&
+        strcmp(sem_entries[i].name, name) == 0) {
       return i;
     }
   }
   return -1;
 }
 
-static int store_sem_entry(const char *name, int handle) {
-  int idx = find_sem_entry(name);
+static int store_sem_entry(const char *name, int owner_pid, int handle) {
+  int idx = find_sem_entry(name, owner_pid);
   if (idx >= 0) {
     sem_entries[idx].handle = handle;
     return idx;
@@ -120,6 +123,7 @@ static int store_sem_entry(const char *name, int handle) {
     if (!sem_entries[i].in_use) {
       strcpy(sem_entries[i].name, name);
       sem_entries[i].handle = handle;
+      sem_entries[i].owner_pid = owner_pid;
       sem_entries[i].in_use = 1;
       return i;
     }
@@ -135,7 +139,8 @@ int64_t my_sem_open(char *sem_id, uint64_t initialValue) {
   if (handle < 0) {
     return -1;
   }
-  if (store_sem_entry(sem_id, handle) < 0) {
+  int owner_pid = (int)my_getpid();
+  if (store_sem_entry(sem_id, owner_pid, handle) < 0) {
     sys_sem_close(handle);
     return -1;
   }
@@ -143,7 +148,8 @@ int64_t my_sem_open(char *sem_id, uint64_t initialValue) {
 }
 
 int64_t my_sem_wait(char *sem_id) {
-  int idx = find_sem_entry(sem_id);
+  int owner_pid = (int)my_getpid();
+  int idx = find_sem_entry(sem_id, owner_pid);
   if (idx < 0) {
     return -1;
   }
@@ -151,7 +157,8 @@ int64_t my_sem_wait(char *sem_id) {
 }
 
 int64_t my_sem_post(char *sem_id) {
-  int idx = find_sem_entry(sem_id);
+  int owner_pid = (int)my_getpid();
+  int idx = find_sem_entry(sem_id, owner_pid);
   if (idx < 0) {
     return -1;
   }
@@ -159,13 +166,17 @@ int64_t my_sem_post(char *sem_id) {
 }
 
 int64_t my_sem_close(char *sem_id) {
-  int idx = find_sem_entry(sem_id);
+  int owner_pid = (int)my_getpid();
+  int idx = find_sem_entry(sem_id, owner_pid);
   if (idx < 0) {
     return -1;
   }
   int result = sys_sem_close(sem_entries[idx].handle);
   if (result == 0) {
     sem_entries[idx].in_use = 0;
+    sem_entries[idx].owner_pid = 0;
+    sem_entries[idx].handle = 0;
+    sem_entries[idx].name[0] = '\0';
   }
   return result;
 }
@@ -173,9 +184,13 @@ int64_t my_sem_close(char *sem_id) {
 int64_t my_sem_unlink(char *sem_id) {
   int result = sys_sem_unlink(sem_id);
   if (result == 0) {
-    int idx = find_sem_entry(sem_id);
+    int owner_pid = (int)my_getpid();
+    int idx = find_sem_entry(sem_id, owner_pid);
     if (idx >= 0) {
       sem_entries[idx].in_use = 0;
+      sem_entries[idx].owner_pid = 0;
+      sem_entries[idx].handle = 0;
+      sem_entries[idx].name[0] = '\0';
     }
   }
   return result;

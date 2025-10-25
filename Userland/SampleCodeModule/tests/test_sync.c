@@ -20,6 +20,13 @@ uint64_t my_process_inc(uint64_t argc, char *argv[]) {
   int8_t inc;
   int8_t use_sem;
 
+  // Logging temporal para debug
+  printf("[pid=%ld] argc=%lu args: %s | %s | %s\n",
+         my_getpid(), argc, 
+         argv[0] ? argv[0] : "NULL",
+         argv[1] ? argv[1] : "NULL", 
+         argv[2] ? argv[2] : "NULL");
+
   if (argc != 3)
     return -1;
 
@@ -30,11 +37,13 @@ uint64_t my_process_inc(uint64_t argc, char *argv[]) {
   if ((use_sem = satoi(argv[2])) < 0)
     return -1;
 
-  if (use_sem)
-    if (!my_sem_open(SEM_ID, 1)) {
+  if (use_sem) {
+    int h = my_sem_open(SEM_ID, 1);
+    if (h < 0) {
       printf("test_sync: ERROR opening semaphore\n");
       return -1;
     }
+  }
 
   uint64_t i;
   for (i = 0; i < n; i++) {
