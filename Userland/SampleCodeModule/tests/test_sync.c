@@ -37,6 +37,9 @@ uint64_t my_process_inc(uint64_t argc, char *argv[]) {
   if ((use_sem = satoi(argv[2])) < 0)
     return -1;
 
+  int pid = (int)my_getpid();
+  uint32_t rng = (uint32_t)(pid * 1103515245u + 12345u);
+
   if (use_sem) {
     int h = my_sem_open(SEM_ID, 1);
     if (h < 0) {
@@ -47,6 +50,15 @@ uint64_t my_process_inc(uint64_t argc, char *argv[]) {
 
   uint64_t i;
   for (i = 0; i < n; i++) {
+    if (!use_sem) {
+      rng ^= rng << 13;
+      rng ^= rng >> 17;
+      rng ^= rng << 5;
+      uint32_t extra_yields = (rng & 3u);
+      for (uint32_t k = 0; k < extra_yields; k++) {
+        my_yield();
+      }
+    }
     if (use_sem)
       my_sem_wait(SEM_ID);
     slowInc(&global, inc);
