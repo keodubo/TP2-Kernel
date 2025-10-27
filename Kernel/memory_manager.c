@@ -4,20 +4,16 @@
 #include "naiveConsole.h"
 #include <lib.h>
 
-// Seleccion del memory manager en tiempo de compilacion
+// Wrapper que selecciona el memory manager en tiempo de compilacion
+// Por defecto usa First Fit, con "make buddy" usa Buddy System
+// Solo UN algoritmo puede estar activo a la vez
+
 #ifdef USE_BUDDY_SYSTEM
     // Usar Buddy System
 #else
     // Por defecto usar First Fit
     #define USE_FIRST_FIT
 #endif
-
-    // Archivo: memory_manager.c
-    // Propósito: Envolver las implementaciones de gestión de memoria disponibles
-    // Resumen: Selecciona en tiempo de compilación entre Buddy System y First Fit
-    //          y expone una API uniforme: mm_init, mm_malloc, mm_free, mm_get_info.
-
-// Wrappers que redirigen a la implementacion especifica
 void mm_init(void* start_addr, size_t total_size) {
 #ifdef USE_BUDDY_SYSTEM
     buddy_init(start_addr, total_size);
@@ -26,6 +22,7 @@ void mm_init(void* start_addr, size_t total_size) {
 #endif
 }
 
+// Asigna un bloque de memoria del tamaño solicitado
 void* mm_malloc(size_t size) {
 #ifdef USE_BUDDY_SYSTEM
     return buddy_alloc(size);
@@ -34,6 +31,7 @@ void* mm_malloc(size_t size) {
 #endif
 }
 
+// Libera un bloque de memoria previamente asignado
 void mm_free(void* ptr) {
     if (ptr == NULL) return;
     
@@ -44,6 +42,7 @@ void mm_free(void* ptr) {
 #endif
 }
 
+// Obtiene estadisticas del estado actual de la memoria
 void mm_get_info(memory_info_t* info) {
     if (info == NULL) return;
     
@@ -54,6 +53,7 @@ void mm_get_info(memory_info_t* info) {
 #endif
 }
 
+// Imprime informacion de debugging sobre el estado del heap
 void mm_debug_print() {
 #ifdef USE_BUDDY_SYSTEM
     buddy_debug_print();
@@ -62,6 +62,8 @@ void mm_debug_print() {
 #endif
 }
 
+// Verifica la integridad de las estructuras de memoria
+// Retorna 1 si todo esta OK, 0 si hay corrupcion
 int mm_check_integrity() {
 #ifdef USE_BUDDY_SYSTEM
     return buddy_check_integrity();
@@ -70,6 +72,8 @@ int mm_check_integrity() {
 #endif
 }
 
+// Recolecta estadisticas detalladas para userland
+// Usada por el comando 'mem' para mostrar estado del heap
 void mm_collect_stats(mm_stats_t *stats) {
     if (stats == NULL) {
         return;

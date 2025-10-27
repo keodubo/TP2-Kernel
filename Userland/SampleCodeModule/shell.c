@@ -8,7 +8,7 @@
  * @brief Shell minimalista con soporte para foreground/background
  * 
  * Funcionalidad:
- * - Ejecuta comandos básicos
+ * - Ejecuta comandos basicos
  * - Soporte para & al final (background)
  * - Comandos integrados: jobs, fg, help, exit
  */

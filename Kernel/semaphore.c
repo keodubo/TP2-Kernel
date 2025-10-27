@@ -4,6 +4,9 @@
 #include "include/lib.h"
 
 // Semáforos nombrados en kernel space, con hash table y colas de espera
+// Permite sincronizacion entre procesos no relacionados que acuerdan un nombre
+// SIN SPINLOCKS: Los procesos se bloquean realmente (no hay busy-wait)
+// Wakeup FIFO, atomicidad garantizada con CLI/STI
 
 #define SEM_HANDLE_MAX 128
 
@@ -155,6 +158,7 @@ int ksem_open(const char *name, unsigned int init, ksem_t **out) {
 }
 
 // Decrementa el semáforo o bloquea al proceso si el contador está en cero
+// SIN SPINLOCKS: bloquea el proceso realmente (sin busy-wait)
 int ksem_wait(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -165,14 +169,18 @@ int ksem_wait(ksem_t *sem) {
         return -1;
     }
 
+    // Sección crítica: deshabilitar interrupciones para atomicidad
     uint64_t flags = irq_save();
+    
+    // Fast path: Si count > 0, simplemente decrementar y retornar
     if (sem->count > 0) {
         sem->count--;
         irq_restore(flags);
         return 0;
     }
 
-    // count == 0: encolar y BLOQUEAR sin ventana de carrera
+    // Slow path: count == 0, necesitamos bloquear el proceso
+    // 1. Crear nodo waiter en la cola de espera
     sem_waiter_t *waiter = (sem_waiter_t *)mm_malloc(sizeof(sem_waiter_t));
     if (waiter == NULL) {
         irq_restore(flags);
@@ -181,6 +189,7 @@ int ksem_wait(ksem_t *sem) {
     waiter->proc = current;
     waiter->next = NULL;
 
+    // 2. Encolar al final de la cola (FIFO)
     if (sem->wait_tail == NULL) {
         sem->wait_head = waiter;
         sem->wait_tail = waiter;
@@ -189,41 +198,48 @@ int ksem_wait(ksem_t *sem) {
         sem->wait_tail = waiter;
     }
 
-    // *** FIX: marcar el proceso como BLOQUEADO dentro de la sección crítica
-    // Esto previene el "lost wakeup": si otro CPU hace ksem_post() ahora,
-    // el proceso ya está marcado como BLOCKED y proc_unblock() funcionará correctamente
+    // 3. CRÍTICO: Marcar proceso como BLOCKED DENTRO de la sección crítica
+    // Esto previene "lost wakeup": si ksem_post() se ejecuta ahora,
+    // ya estamos marcados como BLOCKED, entonces proc_unblock() funcionará correctamente
     current->state = BLOCKED;
     current->ticks_left = 0;
 
+    // Fin de la sección crítica
     irq_restore(flags);
 
-    // Ceder CPU inmediatamente sin busy-wait
-    // (sched_force_yield usa el mismo camino que el timer interrupt)
+    // 4. Ceder el CPU inmediatamente (bloqueo cooperativo, NO busy-wait)
     sched_force_yield();
     return 0;
 }
 
 // Incrementa el semáforo y despierta a un proceso bloqueado, si lo hay
+// Usa wakeup FIFO: despierta siempre al proceso que esperó por más tiempo
 int ksem_post(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
     }
 
     sem_waiter_t *waiter = NULL;
+    
+    // Sección crítica: deshabilitar interrupciones
     uint64_t flags = irq_save();
+    
     if (sem->wait_head != NULL) {
+        // Hay procesos esperando: despertar al primero (FIFO)
         waiter = sem->wait_head;
         sem->wait_head = waiter->next;
         if (sem->wait_head == NULL) {
-            sem->wait_tail = NULL;
+            sem->wait_tail = NULL;  // Cola vacía
         }
     } else {
+        // No hay waiters: incrementar contador
         if (sem->count < UINT32_MAX) {
             sem->count++;
         }
     }
     irq_restore(flags);
 
+    // Despertar el proceso FUERA de la sección crítica
     if (waiter != NULL) {
         proc_unblock(waiter->proc->pid);
         mm_free(waiter);

@@ -59,13 +59,14 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
 
     collect_zombies();
 
+    // Reservar un slot en la tabla de procesos (hay MAX_PROCS slots disponibles)
     pcb_t *proc = allocate_slot();
     if (proc == NULL) {
         return -1;
     }
 
+    // Inicializar PCB con datos básicos del proceso
     copy_name(proc->name, name, sizeof(proc->name));
-
     proc->pid = next_pid++;
     if (next_pid <= 0) {
         next_pid = 1;
@@ -74,11 +75,13 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     proc->priority = prio;
     proc->state = NEW;
     proc->fg = fg;
-    proc->ticks_left = TIME_SLICE_TICKS;
+    proc->ticks_left = TIME_SLICE_TICKS;  // Quantum inicial
     proc->parent_pid = -1;
-    proc->entry = entry;
+    proc->entry = entry;  // Puntero a función de userland
     proc->argc = argc;
     proc->argv = argv;
+    
+    // Inicializar estructuras para wait/reap
     proc->exit_code = 0;
     proc->waiting_for = 0;
     proc->child_head = NULL;
@@ -93,17 +96,20 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     proc->zombie_reapable = false;
     proc->fd_table = NULL;
 
+    // Obtener proceso padre actual
     pcb_t *parent = sched_current();
     if (parent != NULL) {
         proc->parent_pid = parent->pid;
     }
 
+    // Asignar stack del kernel (16KB) usando el memory manager
     proc->kstack_base = (uint8_t *)mm_malloc(KSTACK_SIZE);
     if (proc->kstack_base == NULL) {
         release_slot(proc);
         return -1;
     }
 
+    // Configurar el stack inicial con los registros para el primer context switch
     setup_stack(proc);
 
     proc->fd_table = fd_table_create();

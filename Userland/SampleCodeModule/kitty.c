@@ -1394,15 +1394,15 @@ void cmd_loop()
 				strcpy(args[0], "silent");
 			}
 			args[1] = NULL;
-			pid = sys_create_process(loop_process, 1, args, name, (uint8_t)prio);
+			pid = sys_create_process_ex(loop_process, 1, args, name, (uint8_t)prio, 0);
 		} else {
-			pid = sys_create_process(loop_process, 0, NULL, name, (uint8_t)prio);
+			pid = sys_create_process_ex(loop_process, 0, NULL, name, (uint8_t)prio, 0);
 		}
 	}
 	else
 	{
-		// Foreground: crear sin argumentos (output normal)
-		pid = sys_create_process(loop_process, 0, NULL, name, (uint8_t)prio);
+		// Foreground: crear sin argumentos (output normal) y tomar la TTY
+		pid = sys_create_process_ex(loop_process, 0, NULL, name, (uint8_t)prio, 1);
 	}
 	
 	if (pid < 0)
