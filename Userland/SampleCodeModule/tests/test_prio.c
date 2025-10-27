@@ -87,11 +87,11 @@ void endless_pid(int argc, char **argv) {
 		for (volatile int i = 0; i < 50000; i++)
 			;
 		
-		// Escribir directamente a STDOUT con salto de línea
-		// Esto forzará el flush y será más visible
+		// Escribir directamente a STDOUT siempre con espacio
+		// El terminal hará el wrapping natural
 		char buf[3];
 		buf[0] = argv[1][0];
-		buf[1] = '\n';
+		buf[1] = ' ';  // Siempre espacio
 		buf[2] = '\0';
 		sys_write_fd(STDOUT, buf, 2);
 		
@@ -107,10 +107,17 @@ uint64_t test_prio(uint64_t argc, char *argv[]) {
   static char arg_buffers[TOTAL_PROCESSES][12];
   static char *args_arrays[TOTAL_PROCESSES][3];
 
-  (void)argc;
-  (void)argv;
-
+  // Parsear parámetro de duración (en ms)
+  uint64_t duration_ms = 2000;  // Default
+  if (argc > 0 && argv[0] != NULL) {
+    duration_ms = satoi(argv[0]);
+    if (duration_ms == 0) {
+      duration_ms = 2000;  // Valor por defecto si no es válido
+    }
+  }
+  
   printf("\n=== TEST PRIORITY ===\n");
+  printf("Duration per phase: %lu ms\n", duration_ms);
   
   // Preparar argumentos para cada proceso
   for (i = 0; i < TOTAL_PROCESSES; i++) {
@@ -139,8 +146,8 @@ uint64_t test_prio(uint64_t argc, char *argv[]) {
     printf("Created process %ld (PID: %ld)\n", i, pids[i]);
   }
 
-  printf("\nObserve equal distribution with MEDIUM priority:\n");
-  observe_equal(2000);  // Fase 1: Test compite equitativamente
+  printf("\nFase 1 - Equal distribution (MEDIUM priority): \n");
+  observe_equal(duration_ms);  // Fase 1: Test compite equitativamente
   printf("\n\n");
   
   printf("CHANGING PRIORITIES to different levels...\n");
@@ -149,9 +156,8 @@ uint64_t test_prio(uint64_t argc, char *argv[]) {
     my_nice(pids[i], prio[i]);
   }
 
-  printf("\nObserve how priority affects scheduling:\n");
-  printf("(Process 0=LOWEST, Process 1=MEDIUM, Process 2=HIGHEST)\n");
-  observe_prio_diff(2000);  // Fase 2: Test cede CPU pero mantiene control
+  printf("\nFase 2 - Priority scheduling (0=LOW, 1=MED, 2=HIGH): \n");
+  observe_prio_diff(duration_ms);  // Fase 2: Test cede CPU pero mantiene control
   printf("\n\n");
   
   printf("BLOCKING all processes...\n");
@@ -170,8 +176,8 @@ uint64_t test_prio(uint64_t argc, char *argv[]) {
     my_unblock(pids[i]);
   }
 
-  printf("Observe equal distribution again:\n");
-  observe_equal(2000);  // Fase 3: Test compite equitativamente otra vez
+  printf("Fase 3 - Equal distribution again (after reset): \n");
+  observe_equal(duration_ms);  // Fase 3: Test compite equitativamente otra vez
   printf("\n\n");
   
   printf("KILLING all processes...\n");
