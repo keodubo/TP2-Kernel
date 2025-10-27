@@ -279,6 +279,7 @@ void cmd_ps(void);
 void cmd_loop(void);
 void cmd_nice(void);
 void cmd_kill(void);
+void cmd_block(void);
 void cmd_yield(void);
 void cmd_shell(void);
 void cmd_waitpid(void);
@@ -309,6 +310,7 @@ void printHelp()
 	printsColor("\n>sh                 - start new shell with FG/BG support (use '&' for background)", MAX_BUFF, LIGHT_GREEN);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>block <pid>        - toggle process between BLOCKED and READY", MAX_BUFF, LIGHT_BLUE);
     printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
     printsColor("\n>waitpid <pid|-1>  - wait for a child to finish", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>echo <text>        - print text to stdout", MAX_BUFF, LIGHT_BLUE);
@@ -332,7 +334,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "jobs", "sh"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "jobs", "sh"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -355,6 +357,7 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_loop,
 	cmd_nice,
 	cmd_kill,
+	cmd_block,
 	cmd_yield,
 	cmd_waitpid,
 	cmd_mem,
@@ -507,6 +510,8 @@ static void echo_output(const char *param, int interactive) {
 	sys_write_fd(SHELL_STDOUT, &newline, 1);
 }
 
+// Detecta si hay un operador '|' (pipe) en la linea
+// Retorna la posicion del pipe o -1 si no hay
 static int has_pipe(char *str) {
 	for (int i = 0; str[i] != '\0'; i++) {
 		if (str[i] == '|') {
@@ -547,6 +552,8 @@ static int run_pipeline_command(const char *cmd, const char *param) {
 }
 
 // Ejecuta dos comandos conectados por un pipe
+// Crea un pipe temporal, redirige stdout del primer comando al pipe,
+// redirige stdin del segundo comando del pipe, y ejecuta secuencialmente
 static void execute_pipe(char *left_line, char *right_line) {
 	char left_cmd[MAX_BUFF + 1] = {0};
 	char left_param[MAX_BUFF + 1] = {0};
@@ -1504,6 +1511,87 @@ void cmd_kill()
 	{
 		printf("\nKilled pid %d\n", pid);
 	}
+}
+
+void cmd_block()
+{
+	int idx = 0;
+	char token[MAX_BUFF];
+	int pid;
+
+	if (!next_token(parameter, &idx, token, sizeof(token)))
+	{
+		printsColor("\nUsage: block <pid>", MAX_BUFF, RED);
+		return;
+	}
+
+	if (!parse_int_token(token, &pid) || pid <= 0)
+	{
+		printsColor("\nInvalid pid", MAX_BUFF, RED);
+		return;
+	}
+
+	int self_pid = (int)sys_getpid();
+	if (pid == self_pid)
+	{
+		printsColor("\nblock: refusing to block the current shell", MAX_BUFF, ORANGE);
+		return;
+	}
+
+	proc_info_t procs[MAX_PROCS];
+	int count = sys_proc_snapshot(procs, MAX_PROCS);
+	if (count <= 0)
+	{
+		printsColor("\nblock: could not read process list", MAX_BUFF, RED);
+		return;
+	}
+
+	proc_info_t *target = NULL;
+	for (int i = 0; i < count; i++)
+	{
+		if (procs[i].pid == pid)
+		{
+			target = &procs[i];
+			break;
+		}
+	}
+
+	if (target == NULL)
+	{
+		printsColor("\nblock: pid not found", MAX_BUFF, RED);
+		return;
+	}
+
+	if (target->state == 4)
+	{
+		printsColor("\nblock: process already exited", MAX_BUFF, RED);
+		return;
+	}
+
+	if (target->state == 3)
+	{
+		if (sys_unblock(pid) < 0)
+		{
+			printsColor("\nblock: failed to unblock process", MAX_BUFF, RED);
+			return;
+		}
+		printf("\nProcess %d moved to READY\n", pid);
+		return;
+	}
+
+	if (target->state == 0)
+	{
+		printsColor("\nblock: process not started yet", MAX_BUFF, ORANGE);
+		return;
+	}
+
+	if (sys_block(pid) < 0)
+	{
+		printsColor("\nblock: failed to block process", MAX_BUFF, RED);
+		return;
+	}
+
+	printf("\nProcess %d moved to BLOCKED\n", pid);
 }
 
 void cmd_yield()
