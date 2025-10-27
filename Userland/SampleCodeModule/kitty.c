@@ -9,7 +9,6 @@
 #include <ascii.h>
 #include "../tests/test_util.h"
 #include "../tests/syscall.h"
-#include "sh/jobs.h"
 
 // Shell interactiva: parsea comandos, gestiona pipes y utilidades de tests
 
@@ -281,14 +280,12 @@ void cmd_nice(void);
 void cmd_kill(void);
 void cmd_block(void);
 void cmd_yield(void);
-void cmd_shell(void);
 void cmd_waitpid(void);
 void cmd_cat(void);
 void cmd_wc(void);
 void cmd_filter(void);
 void cmd_mem(void);
 void cmd_echo(void);
-void cmd_jobs(void);
 void printPrompt(void);
 
 extern int mem_command(int argc, char **argv);
@@ -306,8 +303,6 @@ void printHelp()
 	printsColor("\n>invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>jobs               - list background processes", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>sh                 - start new shell with FG/BG support (use '&' for background)", MAX_BUFF, LIGHT_GREEN);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>block <pid>        - toggle process between BLOCKED and READY", MAX_BUFF, LIGHT_BLUE);
@@ -334,7 +329,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "jobs", "sh"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -364,23 +359,17 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_cat,
 	cmd_wc,
 	cmd_filter,
-	cmd_echo,
-	cmd_jobs,
-	cmd_shell
+	cmd_echo
 };
 
 // Bucle principal de la shell: lee caracteres y procesa líneas completas
 void kitty()
 {
 	char c;
-	jobs_init();
 	printPrompt();
 
 	while (1 && !terminate)
 	{
-		// Recolectar zombies de procesos background
-		jobs_reap_background();
-		
 		drawCursor();
 		c = getChar();
 		printLine(c);
@@ -1420,8 +1409,7 @@ void cmd_loop()
 	
 	if (is_background)
 	{
-		// Background: no wait, agregar a jobs
-		jobs_add(pid, name);
+		// Background: no wait
 		// Imprimir prompt inmediatamente para que el usuario pueda continuar
 		printPrompt();
 	}
@@ -1680,22 +1668,6 @@ void cmd_filter()
 void cmd_echo()
 {
 	echo_output(parameter, 1);
-}
-
-void cmd_jobs()
-{
-	jobs_list();
-}
-
-void cmd_shell()
-{
-	extern void shell_main(int argc, char **argv);
-	
-	printsColor("\nStarting new shell with FG/BG support...\n", MAX_BUFF, LIGHT_BLUE);
-	printsColor("Type 'help' in the new shell for commands\n", MAX_BUFF, CYAN);
-	printsColor("Use '&' at the end of commands to run in background\n\n", MAX_BUFF, CYAN);
-	
-	shell_main(0, NULL);
 }
 
 void historyCaller(int direction)
