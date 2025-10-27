@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "../include/sys_calls.h"
 #include "../include/userlib.h"
+#include "../include/mm_stats.h"
 
 #define MAX_BLOCKS 128
 
@@ -45,6 +46,14 @@ uint64_t test_mm(uint64_t argc, char *argv[]) {
         total += mm_rqs[rq].size;
         rq++;
         printf("Bloque %d asignado exitosamente\n", rq-1);
+        
+        // Imprimir información del heap como en comando mem
+        mm_stats_t stats;
+        if (sys_mm_get_stats(&stats) >= 0) {
+          printf("heap: %d bytes\n", (int)stats.heap_total);
+          printf("used: %d bytes\n", (int)stats.used_bytes);
+          printf("free: %d bytes\n", (int)stats.free_bytes);
+        }
       } else {
         printf("Error: no se pudo asignar bloque %d\n", rq);
         break;
