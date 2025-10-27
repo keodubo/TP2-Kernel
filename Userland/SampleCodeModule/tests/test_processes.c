@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include "syscall.h"
 #include "test_util.h"
+#include "../include/userlib.h"
+#include "../include/sys_calls.h"
 
 enum State { RUNNING,
              BLOCKED,
@@ -10,6 +12,52 @@ typedef struct P_rq {
   int32_t pid;
   enum State state;
 } p_rq;
+
+// Función helper para convertir estado a string
+static const char *state_to_string(int state) {
+  switch (state) {
+  case 0:
+    return "NEW";
+  case 1:
+    return "READY";
+  case 2:
+    return "RUN";
+  case 3:
+    return "BLOCK";
+  case 4:
+    return "EXIT";
+  default:
+    return "?";
+  }
+}
+
+// Función para imprimir información de procesos como ps
+static void print_processes_info(void) {
+  proc_info_t info[128];  // MAX_PROCS = 128
+  int count = sys_proc_snapshot(info, 128);
+  
+  if (count <= 0) {
+    printf("\nNo processes to show\n");
+    return;
+  }
+
+  // Imprimir encabezado
+  printsColor("\nPID   PRIO STATE  TICKS FG        SP                BP                NAME", 254, GREEN);
+  printf("\n");
+  
+  // Imprimir cada proceso
+  for (int i = 0; i < count; i++) {
+    const char *state = state_to_string(info[i].state);
+    const char *fg = info[i].fg ? "FG" : "BG";
+    printf("PID %d PRIO %d STATE %s TICKS %d %s ", info[i].pid, info[i].priority, state, info[i].ticks_left, fg);
+    printf("0x");
+    printHex(info[i].sp);
+    printf(" ");
+    printf("0x");
+    printHex(info[i].bp);
+    printf(" %s\n", info[i].name);
+  }
+}
 
 int64_t test_processes(uint64_t argc, char *argv[]) {
   uint8_t rq;
@@ -40,6 +88,8 @@ int64_t test_processes(uint64_t argc, char *argv[]) {
         alive++;
       }
     }
+    printf("\nProcesos creados. Estado actual:\n");
+    print_processes_info();
 
     // Randomly kills, blocks or unblocks processes until every one has been killed
     while (alive > 0) {
@@ -80,6 +130,9 @@ int64_t test_processes(uint64_t argc, char *argv[]) {
           }
           p_rqs[rq].state = RUNNING;
         }
+      
+      printf("\nEstado despues de modificaciones (vivos: %d):\n", alive);
+      print_processes_info();
     }
   }
 }
