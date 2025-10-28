@@ -51,6 +51,7 @@ static void debug_log_u64(const char *tag, const char *label, uint64_t value);
 static void debug_dump_args(const char *tag, int argc, char **argv);
 
 static int debug_enabled = 0;
+static int is_background = 0; // Flag para indicar si el comando se ejecuta en background
 #define DBG_MSG(msg) debug_log("kitty", msg)
 #define DBG_VAL(label, value) debug_log_u64("kitty", label, value)
 #define DBG_ARGS(argc, argv) debug_dump_args("kitty", argc, argv)
@@ -90,9 +91,9 @@ static void free_spawn_args(char **argv, int argc) {
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv) {
     DBG_MSG("spawn_test_process");
     DBG_VAL("argc", (uint64_t)argc);
-    // Crear el proceso en foreground (1) para que reciba Ctrl+C correctamente
-    // La shell hará waitpid manualmente después
-    int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, 1);
+    // Determinar si el proceso debe ser foreground o background según is_background
+    // Si es background, usar is_fg=0, si es foreground, usar is_fg=1
+    int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, is_background ? 0 : 1);
     if (pid < 0 && argv != NULL) {
         free_spawn_args(argv, argc);
     }
@@ -246,7 +247,6 @@ static char commandHistory[MAX_COMMAND][MAX_BUFF] = {0};
 static int commandIterator = 0;
 static int commandIdxMax = 0;
 static int loop_counter = 0;
-static int is_background = 0; // Flag para indicar si el comando se ejecuta en background
 
 char usernameLength = 4;
 
@@ -915,24 +915,26 @@ void cmd_test_mm()
 	} else {
 		printsColor("CREATED 'test_mm' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
-		printsColor("Running test_mm...\n", MAX_BUFF, LIGHT_BLUE);
 		
-		// Esperar a que termine (el hijo es foreground ahora)
-		int status = 0;
-		sys_wait_pid(pid, &status);
-		printsColor("[test_mm finished]\n", MAX_BUFF, LIGHT_BLUE);
-		
-		// Asegurarse de que la shell recupera el foreground
-		// Esto es necesario si el hijo fue matado con Ctrl+C
-		
-		// Limpiar buffer de línea y mostrar prompt
-		for (int i = 0; i < MAX_BUFF; i++) {
-			line[i] = 0;
-			command[i] = 0;
-			parameter[i] = 0;
+		if (is_background) {
+			// Background: no wait, imprimir prompt inmediatamente
+			printsColor("[test_mm running in background]\n", MAX_BUFF, LIGHT_BLUE);
+		} else {
+			// Foreground: esperar a que termine
+			printsColor("Running test_mm...\n", MAX_BUFF, LIGHT_BLUE);
+			int status = 0;
+			sys_wait_pid(pid, &status);
+			printsColor("[test_mm finished]\n", MAX_BUFF, LIGHT_BLUE);
+			
+			// Limpiar buffer de línea y mostrar prompt
+			for (int i = 0; i < MAX_BUFF; i++) {
+				line[i] = 0;
+				command[i] = 0;
+				parameter[i] = 0;
+			}
+			linePos = 0;
+			printPrompt();
 		}
-		linePos = 0;
-		printPrompt();
 	}
 }
 
@@ -981,19 +983,24 @@ void cmd_test_processes()
 		printsColor("CREATED 'test_processes' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		
-		// Esperar a que termine (en background, shell mantiene TTY)
-		int status = 0;
-		sys_wait_pid(pid, &status);
-		printsColor("[test_processes finished]\n", MAX_BUFF, LIGHT_BLUE);
-		
-		// Limpiar buffer de línea y mostrar prompt
-		for (int i = 0; i < MAX_BUFF; i++) {
-			line[i] = 0;
-			command[i] = 0;
-			parameter[i] = 0;
+		if (is_background) {
+			// Background: no wait, imprimir prompt inmediatamente
+			printsColor("[test_processes running in background]\n", MAX_BUFF, LIGHT_BLUE);
+		} else {
+			// Foreground: esperar a que termine
+			int status = 0;
+			sys_wait_pid(pid, &status);
+			printsColor("[test_processes finished]\n", MAX_BUFF, LIGHT_BLUE);
+			
+			// Limpiar buffer de línea y mostrar prompt
+			for (int i = 0; i < MAX_BUFF; i++) {
+				line[i] = 0;
+				command[i] = 0;
+				parameter[i] = 0;
+			}
+			linePos = 0;
+			printPrompt();
 		}
-		linePos = 0;
-		printPrompt();
 	}
 }
 
@@ -1041,21 +1048,27 @@ void cmd_test_priority()
 	} else {
 		printsColor("CREATED 'test_priority' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
-		printsColor("Observe the counters to compare priorities.\n", MAX_BUFF, LIGHT_BLUE);
 		
-		// Esperar a que termine (en background, shell mantiene TTY)
-		int status = 0;
-		sys_wait_pid(pid, &status);
-		printsColor("[test_priority finished]\n", MAX_BUFF, LIGHT_BLUE);
-		
-		// Limpiar buffer de línea y mostrar prompt
-		for (int i = 0; i < MAX_BUFF; i++) {
-			line[i] = 0;
-			command[i] = 0;
-			parameter[i] = 0;
+		if (is_background) {
+			// Background: no wait, imprimir prompt inmediatamente
+			printsColor("[test_priority running in background]\n", MAX_BUFF, LIGHT_BLUE);
+			printsColor("Observe the counters to compare priorities.\n", MAX_BUFF, LIGHT_BLUE);
+		} else {
+			// Foreground: esperar a que termine
+			printsColor("Observe the counters to compare priorities.\n", MAX_BUFF, LIGHT_BLUE);
+			int status = 0;
+			sys_wait_pid(pid, &status);
+			printsColor("[test_priority finished]\n", MAX_BUFF, LIGHT_BLUE);
+			
+			// Limpiar buffer de línea y mostrar prompt
+			for (int i = 0; i < MAX_BUFF; i++) {
+				line[i] = 0;
+				command[i] = 0;
+				parameter[i] = 0;
+			}
+			linePos = 0;
+			printPrompt();
 		}
-		linePos = 0;
-		printPrompt();
 	}
 }
 
@@ -1110,19 +1123,24 @@ void cmd_test_no_synchro()
 		printsColor("CREATED 'test_no_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		
-		// Esperar a que termine (en background, shell mantiene TTY)
-		int status = 0;
-		sys_wait_pid(pid, &status);
-		printsColor("[test_no_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
-		
-		// Limpiar buffer de línea y mostrar prompt
-		for (int i = 0; i < MAX_BUFF; i++) {
-			line[i] = 0;
-			command[i] = 0;
-			parameter[i] = 0;
+		if (is_background) {
+			// Background: no wait, imprimir prompt inmediatamente
+			printsColor("[test_no_synchro running in background]\n", MAX_BUFF, LIGHT_BLUE);
+		} else {
+			// Foreground: esperar a que termine
+			int status = 0;
+			sys_wait_pid(pid, &status);
+			printsColor("[test_no_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
+			
+			// Limpiar buffer de línea y mostrar prompt
+			for (int i = 0; i < MAX_BUFF; i++) {
+				line[i] = 0;
+				command[i] = 0;
+				parameter[i] = 0;
+			}
+			linePos = 0;
+			printPrompt();
 		}
-		linePos = 0;
-		printPrompt();
 	}
 }
 
@@ -1204,19 +1222,24 @@ void cmd_test_synchro()
 		printsColor("CREATED 'test_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		
-		// Esperar a que termine (en background, shell mantiene TTY)
-		int status = 0;
-		sys_wait_pid(pid, &status);
-		printsColor("[test_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
-		
-		// Limpiar buffer de línea y mostrar prompt
-		for (int i = 0; i < MAX_BUFF; i++) {
-			line[i] = 0;
-			command[i] = 0;
-			parameter[i] = 0;
+		if (is_background) {
+			// Background: no wait, imprimir prompt inmediatamente
+			printsColor("[test_synchro running in background]\n", MAX_BUFF, LIGHT_BLUE);
+		} else {
+			// Foreground: esperar a que termine
+			int status = 0;
+			sys_wait_pid(pid, &status);
+			printsColor("[test_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
+			
+			// Limpiar buffer de línea y mostrar prompt
+			for (int i = 0; i < MAX_BUFF; i++) {
+				line[i] = 0;
+				command[i] = 0;
+				parameter[i] = 0;
+			}
+			linePos = 0;
+			printPrompt();
 		}
-		linePos = 0;
-		printPrompt();
 	}
 }
 
