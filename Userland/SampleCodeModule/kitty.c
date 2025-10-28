@@ -727,7 +727,8 @@ void newLine()
 		(*commands_ptr[i])();
 	}
 
-	for (int i = 0; line[i] != '\0'; i++)
+	// Limpiar buffers ANTES de imprimir prompt
+	for (int i = 0; i < MAX_BUFF; i++)
 	{
 		line[i] = 0;
 		command[i] = 0;
@@ -1384,18 +1385,9 @@ void cmd_loop()
 	int pid;
 	if (is_background)
 	{
-		// Background: crear con argumento "silent" para suprimir output
-		char **args = (char**)sys_malloc(2 * sizeof(char*));
-		if (args != NULL) {
-			args[0] = (char*)sys_malloc(7);
-			if (args[0] != NULL) {
-				strcpy(args[0], "silent");
-			}
-			args[1] = NULL;
-			pid = sys_create_process_ex(loop_process, 1, args, name, (uint8_t)prio, 0);
-		} else {
-			pid = sys_create_process_ex(loop_process, 0, NULL, name, (uint8_t)prio, 0);
-		}
+		// Background: crear sin argumentos para que imprima normalmente
+		// NO tomar el TTY (is_fg=0) para que la shell mantenga el control
+		pid = sys_create_process_ex(loop_process, 0, NULL, name, (uint8_t)prio, 0);
 	}
 	else
 	{
