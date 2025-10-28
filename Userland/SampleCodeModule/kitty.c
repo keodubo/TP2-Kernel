@@ -307,7 +307,7 @@ void printHelp()
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>block <pid>        - toggle process between BLOCKED and READY", MAX_BUFF, LIGHT_BLUE);
     printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
-    printsColor("\n>waitpid <pid|-1>  - wait for a child to finish", MAX_BUFF, LIGHT_BLUE);
+    printsColor("\n>waitpid <pid|-1>   - wait for a child to finish", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>echo <text>        - print text to stdout", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>mem [-v]           - show memory usage statistics", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>cat                - read from stdin and write to stdout", MAX_BUFF, LIGHT_BLUE);
@@ -315,9 +315,9 @@ void printHelp()
 	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
     printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
-    printsColor("\n>test_priority [ms]- scheduling demo (default: 1500)", MAX_BUFF, YELLOW);
+    printsColor("\n>test_priority [ms] - scheduling demo (default: 1500)", MAX_BUFF, YELLOW);
 	printsColor("\n>test_no_synchro [n]- run race condition without semaphores", MAX_BUFF, YELLOW);
-	printsColor("\n>test_synchro [n] [u] - run synchronized version using semaphores", MAX_BUFF, YELLOW);
+	printsColor("\n>test_synchro [n]   - run synchronized version using semaphores", MAX_BUFF, YELLOW);
 	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n\n", MAX_BUFF, WHITE);
 	printsColor("Background execution:\n", MAX_BUFF, GREEN);
@@ -998,8 +998,7 @@ void cmd_test_priority()
 	printsColor("\n========================================", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n    PRIORITY SCHEDULING TEST", MAX_BUFF, YELLOW);
 	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
-	printsColor("Running test_priority\n", MAX_BUFF, WHITE);
-	printsColor("Default window: 1500 ms (override with argument).\n", MAX_BUFF, ORANGE);
+
 
 	char token[32];
 	int idx = 0;
