@@ -90,9 +90,9 @@ static void free_spawn_args(char **argv, int argc) {
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv) {
     DBG_MSG("spawn_test_process");
     DBG_VAL("argc", (uint64_t)argc);
-    // Crear el proceso en background (0) para que la shell mantenga el TTY
+    // Crear el proceso en foreground (1) para que reciba Ctrl+C correctamente
     // La shell hará waitpid manualmente después
-    int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, 0);
+    int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, 1);
     if (pid < 0 && argv != NULL) {
         free_spawn_args(argv, argc);
     }
@@ -916,10 +916,13 @@ void cmd_test_mm()
 		printf("%d)\n", (int)pid);
 		printsColor("Running test_mm...\n", MAX_BUFF, LIGHT_BLUE);
 		
-		// Esperar a que termine (en background, shell mantiene TTY)
+		// Esperar a que termine (el hijo es foreground ahora)
 		int status = 0;
 		sys_wait_pid(pid, &status);
 		printsColor("[test_mm finished]\n", MAX_BUFF, LIGHT_BLUE);
+		
+		// Asegurarse de que la shell recupera el foreground
+		// Esto es necesario si el hijo fue matado con Ctrl+C
 		
 		// Limpiar buffer de línea y mostrar prompt
 		for (int i = 0; i < MAX_BUFF; i++) {
