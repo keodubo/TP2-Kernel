@@ -90,8 +90,9 @@ static void free_spawn_args(char **argv, int argc) {
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv) {
     DBG_MSG("spawn_test_process");
     DBG_VAL("argc", (uint64_t)argc);
-    // Crear el proceso como foreground para que la shell pueda matarlo con Ctrl+C
-    int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, 1);
+    // Crear el proceso en background (0) para que la shell mantenga el TTY
+    // La shell hará waitpid manualmente después
+    int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, 0);
     if (pid < 0 && argv != NULL) {
         free_spawn_args(argv, argc);
     }
@@ -913,9 +914,9 @@ void cmd_test_mm()
 	} else {
 		printsColor("CREATED 'test_mm' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
-		printsColor("Press Ctrl+C to stop if needed\n", MAX_BUFF, LIGHT_BLUE);
+		printsColor("Running test_mm...\n", MAX_BUFF, LIGHT_BLUE);
 		
-		// Esperar a que termine (automáticamente en foreground)
+		// Esperar a que termine (en background, shell mantiene TTY)
 		int status = 0;
 		sys_wait_pid(pid, &status);
 		printsColor("[test_mm finished]\n", MAX_BUFF, LIGHT_BLUE);
@@ -937,7 +938,6 @@ void cmd_test_processes()
 	printsColor("\n    PROCESS MANAGEMENT TEST", MAX_BUFF, YELLOW);
 	printsColor("\n========================================\n", MAX_BUFF, LIGHT_BLUE);
 	printsColor("Running test_processes\n", MAX_BUFF, WHITE);
-	printsColor("Press Ctrl+C to stop the test.\n", MAX_BUFF, ORANGE);
 	
 	char token[32];
 	int idx = 0;
@@ -977,7 +977,7 @@ void cmd_test_processes()
 		printsColor("CREATED 'test_processes' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		
-		// Esperar a que termine (automáticamente en foreground)
+		// Esperar a que termine (en background, shell mantiene TTY)
 		int status = 0;
 		sys_wait_pid(pid, &status);
 		printsColor("[test_processes finished]\n", MAX_BUFF, LIGHT_BLUE);
@@ -1039,7 +1039,7 @@ void cmd_test_priority()
 		printf("%d)\n", (int)pid);
 		printsColor("Observe the counters to compare priorities.\n", MAX_BUFF, LIGHT_BLUE);
 		
-		// Esperar a que termine (automáticamente en foreground)
+		// Esperar a que termine (en background, shell mantiene TTY)
 		int status = 0;
 		sys_wait_pid(pid, &status);
 		printsColor("[test_priority finished]\n", MAX_BUFF, LIGHT_BLUE);
@@ -1106,7 +1106,7 @@ void cmd_test_no_synchro()
 		printsColor("CREATED 'test_no_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		
-		// Esperar a que termine (automáticamente en foreground)
+		// Esperar a que termine (en background, shell mantiene TTY)
 		int status = 0;
 		sys_wait_pid(pid, &status);
 		printsColor("[test_no_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
@@ -1200,7 +1200,7 @@ void cmd_test_synchro()
 		printsColor("CREATED 'test_synchro' PROCESS (PID: ", MAX_BUFF, GREEN);
 		printf("%d)\n", (int)pid);
 		
-		// Esperar a que termine (automáticamente en foreground)
+		// Esperar a que termine (en background, shell mantiene TTY)
 		int status = 0;
 		sys_wait_pid(pid, &status);
 		printsColor("[test_synchro finished]\n", MAX_BUFF, LIGHT_BLUE);
