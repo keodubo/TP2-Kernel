@@ -91,9 +91,9 @@ void endless_pid(int argc, char **argv) {
 		// Esto forzará el flush y será más visible
 		char buf[3];
 		buf[0] = argv[1][0];
-		buf[1] = '\n';
+		buf[1] = ' ';
 		buf[2] = '\0';
-		sys_write_fd(STDOUT, buf, 2);
+		sys_write_fd(STDOUT, buf, 2); //los parametros que se le pasan son el fd, el buffer y la cantidad de bytes a escribir
 		
 		// Yield para dar oportunidad a otros procesos
 		my_yield();
