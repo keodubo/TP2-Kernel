@@ -12,6 +12,7 @@ static bool scheduler_enabled = false;
 pcb_t *current = NULL;
 
 static pcb_t *idle_proc = NULL;
+static int priority_budget[MAX_PRIOS];
 
 extern void _force_schedule(void);
 extern void _hlt(void);
@@ -21,12 +22,15 @@ static pcb_t *q_pop(int prio);
 static void q_remove(pcb_t *proc);
 static pcb_t *pick_next(void);
 static void idle_loop(int argc, char **argv);
+static void reset_priority_budget(void);
+static bool ready_has_items(void);
 
 void sched_init(void) {
     for (int i = 0; i < MAX_PRIOS; i++) {
         ready_head[i] = NULL;
         ready_tail[i] = NULL;
     }
+    reset_priority_budget();
 
     scheduler_enabled = false;
     current = NULL;
@@ -218,12 +222,22 @@ static void q_remove(pcb_t *proc) {
 }
 
 static pcb_t *pick_next(void) {
-    for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
-        if (ready_head[prio] != NULL) {
-            return q_pop(prio);
+    while (1) {
+        for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
+            if (priority_budget[prio] <= 0) {
+                continue;
+            }
+            if (ready_head[prio] != NULL) {
+                priority_budget[prio]--;
+                return q_pop(prio);
+            }
         }
+        if (!ready_has_items()) {
+            reset_priority_budget();
+            return NULL;
+        }
+        reset_priority_budget();
     }
-    return NULL;
 }
 
 static void idle_loop(int argc, char **argv) {
@@ -233,4 +247,19 @@ static void idle_loop(int argc, char **argv) {
     while (1) {
         _hlt();
     }
+}
+
+static void reset_priority_budget(void) {
+    for (int prio = MIN_PRIO; prio <= HIGHEST_PRIO; prio++) {
+        priority_budget[prio] = 1 << prio;
+    }
+}
+
+static bool ready_has_items(void) {
+    for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
+        if (ready_head[prio] != NULL) {
+            return true;
+        }
+    }
+    return false;
 }

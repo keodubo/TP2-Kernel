@@ -1334,11 +1334,23 @@ static void loop_process(int argc, char **argv) {
 		}
 	}
 	
+	int counter = 0;
 	while (1) {
 		if (!silent) {
 			printf("[loop %d] .\n", pid);
 		}
-		sys_wait(200);
+		// Hacer yield múltiples veces para permitir que otros procesos corran
+		sys_yield();
+		counter++;
+		
+		// Hacer yield extra cada 5 iteraciones para dar más oportunidad a la shell
+		if (counter % 5 == 0) {
+			sys_yield();
+			sys_yield();
+		}
+		
+		// Esperar suficiente tiempo para no saturar la pantalla
+		sys_wait(1000);
 	}
 }
 
