@@ -65,6 +65,26 @@ void cmd_mvar(void) {
 	sprintf(shared->sem_mutex, "mvarM_%ld_%u", (long)caller_pid, seq);
 	shared->instance_id = ((uint64_t)caller_pid << 32) ^ seq;
 
+	// Inicializar los semáforos ANTES de crear los procesos hijos
+	// Esto asegura que el primer proceso que los use tenga los valores correctos
+	// sem_empty = 1 (MVar vacío, puede escribir)
+	// sem_full = 0 (MVar vacío, no puede leer)
+	// sem_mutex = 1 (desbloqueado)
+	int tmp_empty = my_sem_open(shared->sem_empty, 1);
+	int tmp_full = my_sem_open(shared->sem_full, 0);
+	int tmp_mutex = my_sem_open(shared->sem_mutex, 1);
+	
+	if (tmp_empty < 0 || tmp_full < 0 || tmp_mutex < 0) {
+		printf("[mvar] ERROR: unable to initialize semaphores\n");
+		sys_free(shared);
+		return;
+	}
+	
+	// Cerrar los semáforos en el proceso principal, los hijos los abrirán
+	my_sem_close(shared->sem_empty);
+	my_sem_close(shared->sem_full);
+	my_sem_close(shared->sem_mutex);
+
 	printf("[mvar] Launching %d writer(s) and %d reader(s)\n", writers, readers);
 
 	int error = 0;
@@ -92,8 +112,15 @@ void cmd_mvar(void) {
 	}
 }
 
+static const char *reader_name_for_index(int index) {
+    static const char *names[] = {"r-red","r-grn","r-blu","r-yel","r-cyn","r-mag"};
+    int n = (int)(sizeof(names)/sizeof(names[0]));
+    if (index >= 0 && index < n) return names[index];
+    return NULL; // llamador puede generar r-<idx>
+}
+
 static int spawn_mvar_writer(mvar_shared_state_t *shared, int index) {
-	char **argv = (char **)sys_malloc(sizeof(char *) * 3);
+    char **argv = (char **)sys_malloc(sizeof(char *) * 4);
 	if (argv == NULL) {
 		printf("[mvar] ERROR: unable to allocate argv for writer %d\n", index);
 		return -1;
@@ -101,33 +128,40 @@ static int spawn_mvar_writer(mvar_shared_state_t *shared, int index) {
 
 	argv[0] = alloc_string_from_value((uint64_t)(uintptr_t)shared);
 	argv[1] = alloc_string_from_value((uint64_t)index);
-	argv[2] = NULL;
+    // argv[2] = nombre lógico del proceso para que el hijo lo imprima
+    char pname[8];
+    char letter = (char)('A' + (index % 26));
+    sprintf(pname, "w-%c", letter);
+    argv[2] = (char *)sys_malloc(strlen(pname) + 1);
+    if (argv[2] != NULL) {
+        strcpy(argv[2], pname);
+    }
+    argv[3] = NULL;
 
-	if (argv[0] == NULL || argv[1] == NULL) {
-		free_spawn_args_local(argv, 2);
+    if (argv[0] == NULL || argv[1] == NULL || argv[2] == NULL) {
+        free_spawn_args_local(argv, 3);
 		sys_free(argv);
 		printf("[mvar] ERROR: unable to prepare arguments for writer %d\n", index);
 		return -1;
 	}
 
-	char name[32];
-	sprintf(name, "mvar-w%02d", index);
+    char name[32];
+    sprintf(name, "w-%c", letter);
 
-	int64_t pid = sys_create_process_ex(mvar_writer_entry, 2, argv, name, DEFAULT_PRIORITY, 0);
+    int64_t pid = sys_create_process_ex(mvar_writer_entry, 3, argv, name, DEFAULT_PRIORITY, 0);
 	if (pid < 0) {
-		free_spawn_args_local(argv, 2);
+        free_spawn_args_local(argv, 3);
 		sys_free(argv);
 		printf("[mvar] ERROR: failed to spawn writer %d\n", index);
 		return -1;
 	}
 
-	char letter = (char)('A' + (index % 26));
 	printf("[mvar] writer[%d] -> PID %ld (letter %c)\n", index, (long)pid, letter);
 	return 0;
 }
 
 static int spawn_mvar_reader(mvar_shared_state_t *shared, int index) {
-	char **argv = (char **)sys_malloc(sizeof(char *) * 3);
+    char **argv = (char **)sys_malloc(sizeof(char *) * 4);
 	if (argv == NULL) {
 		printf("[mvar] ERROR: unable to allocate argv for reader %d\n", index);
 		return -1;
@@ -135,21 +169,31 @@ static int spawn_mvar_reader(mvar_shared_state_t *shared, int index) {
 
 	argv[0] = alloc_string_from_value((uint64_t)(uintptr_t)shared);
 	argv[1] = alloc_string_from_value((uint64_t)index);
-	argv[2] = NULL;
+    const char *rname = reader_name_for_index(index);
+    char buf[16];
+    if (rname == NULL) {
+        sprintf(buf, "r-%d", index);
+        rname = buf;
+    }
+    argv[2] = (char *)sys_malloc(strlen(rname) + 1);
+    if (argv[2] != NULL) {
+        strcpy(argv[2], rname);
+    }
+    argv[3] = NULL;
 
-	if (argv[0] == NULL || argv[1] == NULL) {
-		free_spawn_args_local(argv, 2);
+    if (argv[0] == NULL || argv[1] == NULL || argv[2] == NULL) {
+        free_spawn_args_local(argv, 3);
 		sys_free(argv);
 		printf("[mvar] ERROR: unable to prepare arguments for reader %d\n", index);
 		return -1;
 	}
 
-	char name[32];
-	sprintf(name, "mvar-r%02d", index);
+    char name[32];
+    sprintf(name, "%s", argv[2]);
 
-	int64_t pid = sys_create_process_ex(mvar_reader_entry, 2, argv, name, DEFAULT_PRIORITY, 0);
+    int64_t pid = sys_create_process_ex(mvar_reader_entry, 3, argv, name, DEFAULT_PRIORITY, 0);
 	if (pid < 0) {
-		free_spawn_args_local(argv, 2);
+        free_spawn_args_local(argv, 3);
 		sys_free(argv);
 		printf("[mvar] ERROR: failed to spawn reader %d\n", index);
 		return -1;
@@ -267,18 +311,19 @@ static void busy_wait_random(uint32_t salt) {
 }
 
 static void mvar_writer_entry(int argc, char **argv) {
-	if (argc < 2 || argv == NULL) {
+    if (argc < 3 || argv == NULL) {
 		sys_exit(-1);
 		return;
 	}
 
 	mvar_shared_state_t *shared = (mvar_shared_state_t *)(uintptr_t)charToInt(argv[0]);
-	int index = atoi(argv[1]);
+    int index = atoi(argv[1]);
+    const char *selfname = (argv[2] != NULL) ? argv[2] : "w";
 
 	free_spawn_args_local(argv, argc);
 	sys_free(argv);
 
-	if (shared == NULL) {
+    if (shared == NULL) {
 		sys_exit(-1);
 		return;
 	}
@@ -291,7 +336,9 @@ static void mvar_writer_entry(int argc, char **argv) {
 		return;
 	}
 
-	while (1) {
+    printf("[mvar] %s pid=%ld\n", selfname, (long)my_getpid());
+
+    while (1) {
 		busy_wait_random((uint32_t)(shared->instance_id + (uint32_t)index * 37u));
 		my_sem_wait(shared->sem_empty);
 		my_sem_wait(shared->sem_mutex);
@@ -306,13 +353,14 @@ static void mvar_writer_entry(int argc, char **argv) {
 }
 
 static void mvar_reader_entry(int argc, char **argv) {
-	if (argc < 2 || argv == NULL) {
+    if (argc < 3 || argv == NULL) {
 		sys_exit(-1);
 		return;
 	}
 
 	mvar_shared_state_t *shared = (mvar_shared_state_t *)(uintptr_t)charToInt(argv[0]);
-	int index = atoi(argv[1]);
+    int index = atoi(argv[1]);
+    const char *selfname = (argv[2] != NULL) ? argv[2] : "reader";
 
 	free_spawn_args_local(argv, argc);
 	sys_free(argv);
@@ -330,7 +378,8 @@ static void mvar_reader_entry(int argc, char **argv) {
 		return;
 	}
 
-	Color color = pick_reader_color(index);
+    Color color = pick_reader_color(index);
+    printf("[mvar] %s pid=%ld\n", selfname, (long)my_getpid());
 
 	while (1) {
 		busy_wait_random((uint32_t)(shared->instance_id + (uint32_t)index * 131u));
