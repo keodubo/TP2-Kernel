@@ -9,10 +9,12 @@ static pcb_t *ready_head[MAX_PRIOS];
 static pcb_t *ready_tail[MAX_PRIOS];
 static bool scheduler_enabled = false;
 
+#define FG_SKIP_THRESHOLD 5
+
 pcb_t *current = NULL;
 
 static pcb_t *idle_proc = NULL;
-static int priority_budget[MAX_PRIOS];
+static int fg_skip_counter = 0;
 
 extern void _force_schedule(void);
 extern void _hlt(void);
@@ -22,19 +24,17 @@ static pcb_t *q_pop(int prio);
 static void q_remove(pcb_t *proc);
 static pcb_t *pick_next(void);
 static void idle_loop(int argc, char **argv);
-static void reset_priority_budget(void);
-static bool ready_has_items(void);
 
 void sched_init(void) {
     for (int i = 0; i < MAX_PRIOS; i++) {
         ready_head[i] = NULL;
         ready_tail[i] = NULL;
     }
-    reset_priority_budget();
 
     scheduler_enabled = false;
     current = NULL;
     idle_proc = NULL;
+    fg_skip_counter = 0;
 
     int idle_pid = proc_create(idle_loop, 0, NULL, MIN_PRIO, false, "idle");
     if (idle_pid >= 0) {
@@ -155,6 +155,9 @@ uint64_t schedule(uint64_t cur_rsp) {
 
     next->state = RUNNING;
     next->ticks_left = TIME_SLICE_TICKS;
+    if (next->fg) {
+        fg_skip_counter = 0;
+    }
     current = next;
 
     return (uint64_t)current->kframe;
@@ -222,22 +225,62 @@ static void q_remove(pcb_t *proc) {
 }
 
 static pcb_t *pick_next(void) {
-    while (1) {
-        for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
-            if (priority_budget[prio] <= 0) {
-                continue;
-            }
-            if (ready_head[prio] != NULL) {
-                priority_budget[prio]--;
-                return q_pop(prio);
+    pcb_t *fg_candidate = NULL;
+    int fg_candidate_prio = MIN_PRIO;
+    int highest_ready_prio = -1;
+
+    for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
+        if (ready_head[prio] != NULL && highest_ready_prio < prio) {
+            highest_ready_prio = prio;
+        }
+
+        if (fg_candidate == NULL) {
+            pcb_t *cursor = ready_head[prio];
+            while (cursor != NULL) {
+                if (cursor->fg) {
+                    fg_candidate = cursor;
+                    fg_candidate_prio = prio;
+                    break;
+                }
+                cursor = cursor->queue_next;
             }
         }
-        if (!ready_has_items()) {
-            reset_priority_budget();
-            return NULL;
-        }
-        reset_priority_budget();
     }
+
+    bool fg_available = (fg_candidate != NULL);
+
+    if (!fg_available) {
+        fg_skip_counter = 0;
+    }
+
+    if (fg_available && highest_ready_prio > fg_candidate_prio) {
+        if (fg_skip_counter >= FG_SKIP_THRESHOLD) {
+            fg_skip_counter = 0;
+            q_remove(fg_candidate);
+            return fg_candidate;
+        }
+    } else if (fg_available && highest_ready_prio == fg_candidate_prio) {
+        fg_skip_counter = 0;
+    }
+
+    // Selección estricta por prioridad para el resto
+    for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
+        if (ready_head[prio] != NULL) {
+            pcb_t *next = q_pop(prio);
+            if (next != NULL) {
+                if (next->fg) {
+                    fg_skip_counter = 0;
+                } else if (fg_available && highest_ready_prio > fg_candidate_prio) {
+                    fg_skip_counter++;
+                } else if (!fg_available) {
+                    fg_skip_counter = 0;
+                }
+                return next;
+            }
+        }
+    }
+
+    return NULL;
 }
 
 static void idle_loop(int argc, char **argv) {
@@ -247,19 +290,4 @@ static void idle_loop(int argc, char **argv) {
     while (1) {
         _hlt();
     }
-}
-
-static void reset_priority_budget(void) {
-    for (int prio = MIN_PRIO; prio <= HIGHEST_PRIO; prio++) {
-        priority_budget[prio] = 1 << prio;
-    }
-}
-
-static bool ready_has_items(void) {
-    for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
-        if (ready_head[prio] != NULL) {
-            return true;
-        }
-    }
-    return false;
 }
