@@ -42,6 +42,7 @@ void cmd_test_synchro();
 void cmd_debug();
 void cmd_ps();
 void cmd_loop();
+void cmd_mvar();
 void cmd_nice();
 void cmd_kill();
 void cmd_yield();

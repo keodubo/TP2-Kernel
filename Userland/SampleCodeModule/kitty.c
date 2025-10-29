@@ -277,6 +277,7 @@ void cmd_test_synchro(void);
 void cmd_debug(void);
 void cmd_ps(void);
 void cmd_loop(void);
+void cmd_mvar(void);
 void cmd_nice(void);
 void cmd_kill(void);
 void cmd_block(void);
@@ -304,6 +305,7 @@ void printHelp()
 	printsColor("\n>invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
+	printsColor("\n>mvar <w> <r>       - launch MVar demo with writers/readers", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>block <pid>        - toggle process between BLOCKED and READY", MAX_BUFF, LIGHT_BLUE);
@@ -316,7 +318,7 @@ void printHelp()
 	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
     printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
-    printsColor("\n>test_priority [ms] - scheduling demo (default: 1500)", MAX_BUFF, YELLOW);
+    printsColor("\n>test_priority [n]  - scheduling demo (default: 5)", MAX_BUFF, YELLOW);
 	printsColor("\n>test_no_synchro [n]- run race condition without semaphores", MAX_BUFF, YELLOW);
 	printsColor("\n>test_synchro [n]   - run synchronized version using semaphores", MAX_BUFF, YELLOW);
 	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
@@ -330,7 +332,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "mvar", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -351,6 +353,7 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_debug,
 	cmd_ps,
 	cmd_loop,
+	cmd_mvar,
 	cmd_nice,
 	cmd_kill,
 	cmd_block,
