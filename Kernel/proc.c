@@ -266,10 +266,15 @@ void proc_nice(int pid, int new_prio) {
         return;
     }
 
+    int was_ready = (proc->state == READY);
+
+    if (was_ready) {
+        sched_remove(proc);
+    }
+
     proc->priority = new_prio;
 
-    if (proc->state == READY) {
-        sched_remove(proc);
+    if (was_ready) {
         sched_enqueue(proc);
     } else if (proc == sched_current()) {
         proc->ticks_left = 0;
