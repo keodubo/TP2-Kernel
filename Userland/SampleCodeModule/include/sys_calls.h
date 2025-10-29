@@ -96,6 +96,8 @@ int64_t sys_yield();
 
 int64_t sys_wait_pid(int pid, int *status);
 
+int64_t sys_wait_children(int *status);
+
 int64_t sys_exit(int code);
 
 int64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count);

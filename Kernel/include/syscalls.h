@@ -14,6 +14,7 @@ uint64_t sys_nice(int pid, int new_prio);
 uint64_t sys_block(int pid);
 uint64_t sys_unblock(int pid);
 uint64_t sys_wait_pid(int pid, int *status);
+uint64_t sys_wait_children(int *status);
 uint64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count);
 int      sys_sem_open(const char *name, unsigned int init);
 int      sys_sem_wait(int sem_id);

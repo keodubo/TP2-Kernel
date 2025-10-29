@@ -301,3 +301,9 @@ sys_create_process_ex:
     ; r9 ya tiene el 6to parámetro (is_fg)
     int 80h
     ret
+
+sys_wait_children:
+    mov rax, 47
+    ; rdi ya tiene el parámetro (status)
+    int 80h
+    ret

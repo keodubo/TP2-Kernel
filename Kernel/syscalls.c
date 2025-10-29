@@ -63,6 +63,16 @@ uint64_t sys_wait_pid(int pid, int *status) {
     return (uint64_t)waited_pid;
 }
 
+uint64_t sys_wait_children(int *status) {
+    // wait_children espera a cualquier proceso hijo (equivalente a wait_pid(-1, status))
+    int exit_status = 0;
+    int waited_pid = proc_wait(-1, &exit_status);
+    if (waited_pid >= 0 && status != NULL) {
+        *status = exit_status;
+    }
+    return (uint64_t)waited_pid;
+}
+
 uint64_t sys_proc_snapshot(proc_info_t *buffer, uint64_t max_count) {
     if (buffer == NULL || max_count == 0) {
         return 0;

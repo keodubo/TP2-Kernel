@@ -331,6 +331,8 @@ uint64_t syscall_dispatcher(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r
         return sys_create_process_ex((void (*)(int, char**))rdi, (int)rsi, (char**)rdx, (const char*)r10, (uint8_t)r8, (int)r9);
     case 46:
         return sys_mm_get_stats((mm_stats_t*)rdi);
+    case 47:
+        return sys_wait_children((int *)rdi);
     default:
         return 0;
     }
