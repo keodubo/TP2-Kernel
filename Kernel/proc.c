@@ -266,18 +266,34 @@ void proc_nice(int pid, int new_prio) {
         return;
     }
 
-    int was_ready = (proc->state == READY);
+    bool was_running = (proc->state == RUNNING && proc == sched_current());
+    bool was_ready = (proc->state == READY);
 
+    // Remover de la cola actual si está READY
     if (was_ready) {
         sched_remove(proc);
+    } else if (was_running) {
+        // Si está RUNNING, cambiar a READY y limpiar current
+        // (no está en ninguna cola, solo está marcado como current)
+        proc->state = READY;
+        if (sched_current() == proc) {
+            // Limpiar current para que el scheduler pueda elegir otro proceso
+            sched_remove(proc);
+        }
     }
 
+    // Cambiar la prioridad
     proc->priority = new_prio;
 
-    if (was_ready) {
+    // Encolar en la cola correcta según la nueva prioridad
+    if (was_ready || was_running) {
         sched_enqueue(proc);
-    } else if (proc == sched_current()) {
-        proc->ticks_left = 0;
+        
+        // Si estaba corriendo, forzar un reschedule para que el scheduler
+        // elija el proceso con mayor prioridad (que puede no ser este)
+        if (was_running) {
+            sched_force_yield();
+        }
     }
 }
 

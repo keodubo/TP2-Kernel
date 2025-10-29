@@ -70,6 +70,9 @@ void cmd_mvar(void) {
 	// sem_empty = 1 (MVar vacío, puede escribir)
 	// sem_full = 0 (MVar vacío, no puede leer)
 	// sem_mutex = 1 (desbloqueado)
+	// Los hijos abrirán los semáforos por nombre y compartirán las mismas instancias del kernel
+	// NO cerramos los semáforos - los dejamos abiertos para que los hijos puedan encontrarlos
+	// Los semáforos persistirán hasta que todos los procesos (incluido el padre) terminen
 	int tmp_empty = my_sem_open(shared->sem_empty, 1);
 	int tmp_full = my_sem_open(shared->sem_full, 0);
 	int tmp_mutex = my_sem_open(shared->sem_mutex, 1);
@@ -80,10 +83,9 @@ void cmd_mvar(void) {
 		return;
 	}
 	
-	// Cerrar los semáforos en el proceso principal, los hijos los abrirán
-	my_sem_close(shared->sem_empty);
-	my_sem_close(shared->sem_full);
-	my_sem_close(shared->sem_mutex);
+	// No cerramos los semáforos aquí - los hijos los abrirán por nombre y encontrarán
+	// las instancias existentes del kernel. Cuando el proceso principal termine,
+	// los handles locales se limpiarán automáticamente.
 
 	printf("[mvar] Launching %d writer(s) and %d reader(s)\n", writers, readers);
 
@@ -148,7 +150,13 @@ static int spawn_mvar_writer(mvar_shared_state_t *shared, int index) {
     char name[32];
     sprintf(name, "w-%c", letter);
 
-    int64_t pid = sys_create_process_ex(mvar_writer_entry, 3, argv, name, DEFAULT_PRIORITY, 0);
+    // CORRECCIÓN STARDVATION: Todos los escritores usan la misma prioridad (DEFAULT_PRIORITY)
+    // para evitar starvation. Si se quiere que un escritor aparezca más frecuentemente que otro,
+    // se debe hacer ajustando el busy_wait_random, no con prioridades diferentes.
+    // El scheduler estricto por prioridad causaba que escritores con menor prioridad nunca ejecutaran.
+    uint8_t prio = DEFAULT_PRIORITY;
+
+    int64_t pid = sys_create_process_ex(mvar_writer_entry, 3, argv, name, prio, 0);
 	if (pid < 0) {
         free_spawn_args_local(argv, 3);
 		sys_free(argv);
@@ -191,7 +199,15 @@ static int spawn_mvar_reader(mvar_shared_state_t *shared, int index) {
     char name[32];
     sprintf(name, "%s", argv[2]);
 
-    int64_t pid = sys_create_process_ex(mvar_reader_entry, 3, argv, name, DEFAULT_PRIORITY, 0);
+    // Lectores usan MAX_PRIORITY cuando hay menos lectores que escritores
+    // para consumir rápidamente y dar más oportunidades a todos los escritores
+    // (que tienen la misma prioridad entre sí)
+    uint8_t reader_prio = DEFAULT_PRIORITY;
+    if (shared->writer_count > shared->reader_count) {
+        reader_prio = MAX_PRIORITY;
+    }
+
+    int64_t pid = sys_create_process_ex(mvar_reader_entry, 3, argv, name, reader_prio, 0);
 	if (pid < 0) {
         free_spawn_args_local(argv, 3);
 		sys_free(argv);
