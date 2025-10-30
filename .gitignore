@@ -17,6 +17,7 @@ Thumbs.db
 *.swp
 *.tmp
 *~
+extensions.json
 
 # Archivos de respaldo
 *.bak

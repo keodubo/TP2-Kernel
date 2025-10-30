@@ -13,9 +13,6 @@ Sistema operativo básico desarrollado sobre x64BareBones con gestión de memori
   - `gcc`
   - `make`
 
-### Compilación
-
-El proyecto se compila con `-Wall -Wextra -Werror` para garantizar calidad de código.
 
 #### Compilación estándar (First Fit)
 
@@ -38,24 +35,22 @@ make MM_FLAG=-DUSE_BUDDY_SYSTEM all
 
 ### Ejecución
 
-#### Con Docker (recomendado)
+#### Con Docker 
 
-```bash
 make docker
-```
 
-Dentro del contenedor:
+  Dentro del contenedor:
 
-```bash
-make clean all
+cd Toolchain
+make clean && make all
+cd ..
+make clean && make all
+
+  Luego desde otra terminal parado en la raiz del proyecto (~/TP2-Kernel)
+
 ./run.sh
-```
 
-#### Sin Docker
 
-```bash
-./run.sh
-```
 
 O manualmente:
 
@@ -77,7 +72,7 @@ make clean
 
 El sistema soporta dos algoritmos de gestión de memoria, seleccionables en tiempo de compilación:
 
-- **First Fit** (por defecto): Asigna el primer bloque libre que sea suficientemente grande.
+- **First Fit** : Asigna el primer bloque libre que sea suficientemente grande.
 - **Buddy System**: Divide la memoria en bloques de tamaño potencia de 2, mejorando fragmentación interna.
 
 **Interfaz común:**
@@ -565,79 +560,3 @@ nice <pid> 1
 # 6. Matar proceso
 kill <pid>
 ```
-
-## ⚠️ Requerimientos Faltantes o Limitaciones
-
-### Limitaciones Conocidas
-
-1. **Pipes múltiples**: La shell actualmente soporta pipes de dos comandos. Chains de más comandos pueden requerir expansión.
-
-2. ~~**Wait_children**~~ ✅ **RESUELTO**: Syscall `wait_children` implementada como syscall 47. Espera a cualquier proceso hijo.
-
-3. **PVS-Studio**: El análisis con PVS-Studio debe ejecutarse manualmente. Para ejecutarlo:
-   ```bash
-   # Instalar PVS-Studio (si no está instalado)
-   # Ejecutar análisis en el directorio Kernel
-   cd Kernel
-   pvs-studio-analyzer trace -- make all
-   pvs-studio-analyzer analyze
-   plog-converter -a 'GA:1,2;64:1;MISRA:1,2;OP:1,2,3;CS' -t fullhtml -o report report.plog
-   ```
-   O alternativamente, usar el target del Makefile si está disponible:
-   ```bash
-   make pvs-analyze  # (pendiente de implementación)
-   ```
-
-4. **Tamaño de Heap**: El heap está limitado por el tamaño de memoria asignado al sistema (típicamente 512MB en QEMU).
-
-5. **Procesos Máximos**: Hay un límite de `MAX_PROCS` procesos simultáneos (configurable, típicamente 128).
-
-6. **Fragmentación de Memoria**: First Fit puede sufrir fragmentación externa con el tiempo. Buddy System reduce esto pero tiene fragmentación interna.
-
-### Mejoras Futuras Sugeridas
-
-- Soporte para pipes de múltiples comandos en la shell.
-- Implementación de más comandos Unix-like (ls, grep, etc.).
-- Soporte para redirección de entrada/salida (`<`, `>`).
-- Historial de comandos mejorado.
-- Auto-completado de comandos.
-- Mejora en el manejo de señales.
-
-## 📝 Notas de Desarrollo
-
-### Estructura del Proyecto
-
-```
-TP2-Kernel/
-├── Bootloader/          # Código del bootloader (Pure64, BMFS)
-├── Kernel/              # Código del kernel
-│   ├── drivers/         # Drivers (teclado, video, sonido)
-│   ├── interrupt/       # Manejo de interrupciones y syscalls
-│   ├── asm/             # Código assembly
-│   └── include/         # Headers del kernel
-├── Userland/            # Aplicaciones de usuario
-│   └── SampleCodeModule/ # Shell y comandos
-├── Image/               # Archivos de imagen generados
-└── Toolchain/           # Herramientas de compilación
-```
-
-### Memory Managers
-
-El cambio entre First Fit y Buddy System se hace en tiempo de compilación mediante el flag `USE_BUDDY_SYSTEM`. Ambos comparten la misma interfaz pública para facilitar el intercambio.
-
-### Compilación sin Warnings
-
-El proyecto compila con `-Wall -Wextra -Werror`, por lo que cualquier warning se trata como error. Esto garantiza código limpio y sin advertencias del compilador.
-
-## 📄 Licencia
-
-Ver `License.txt` para más información.
-
-## 👥 Autores
-
-Desarrollado como parte del trabajo práctico de Sistemas Operativos.
-
----
-
-**Nota**: Este README documenta todas las características implementadas según los requerimientos del TP2. Para más información técnica, consultar el código fuente y los headers en `Kernel/include/` y `Userland/SampleCodeModule/include/`.
-
