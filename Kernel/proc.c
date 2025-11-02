@@ -3,6 +3,7 @@
 #include "include/lib.h"
 #include "include/tty.h"
 #include "include/fd.h"
+#include "include/naiveConsole.h"
 
 // Gestion de procesos (PCB)
 // Implementa tabla de procesos, creacion, destruccion, comunicacion
@@ -140,6 +141,12 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     insert_proc(proc);
 
     sched_enqueue(proc);
+
+    ncPrint("[KERNEL proc_create] Created process PID=");
+    ncPrintDec(proc->pid);
+    ncPrint(" prio=");
+    ncPrintDec(proc->priority);
+    ncNewline();
 
     // Si el proceso se crea como foreground, actualizar la TTY
     if (fg) {
@@ -452,7 +459,11 @@ static void release_slot(pcb_t *proc) {
 
 static void setup_stack(pcb_t *proc) {
     uint64_t top = (uint64_t)proc->kstack_base + KSTACK_SIZE;
-    top &= ~0xFULL;
+    top &= ~0xFULL;  // Align to 16 bytes
+
+    // Save aligned top for RSP calculation
+    uint64_t aligned_top = top;
+
     top -= sizeof(regs_t);
 
     regs_t *frame = (regs_t *)top;
@@ -463,7 +474,8 @@ static void setup_stack(pcb_t *proc) {
     frame->rip = (uint64_t)trampoline;
     frame->cs = 0x08;
     frame->rflags = 0x202;
-    frame->rsp = (uint64_t)proc->kstack_base + KSTACK_SIZE - 16;
+    // x86-64 ABI: After ret, RSP must be aligned to 16+8 (simulates call)
+    frame->rsp = aligned_top - 8;
     frame->ss = 0x00;
     frame->rdi = (uint64_t)proc;
     frame->rbp = frame->rsp;
@@ -549,9 +561,20 @@ static void copy_name(char *dst, const char *src, size_t max_len) {
 }
 
 static void trampoline(pcb_t *proc) {
-    if (proc != NULL && proc->entry != NULL) {
-        proc->entry(proc->argc, proc->argv);
+    ncPrint("[KERNEL trampoline] Entered!\n");
+    if (proc == NULL) {
+        ncPrint("[KERNEL trampoline] ERROR: proc is NULL\n");
+        proc_exit(-1);
+        while (1) _hlt();
     }
+    if (proc->entry == NULL) {
+        ncPrint("[KERNEL trampoline] ERROR: entry is NULL\n");
+        proc_exit(-1);
+        while (1) _hlt();
+    }
+    ncPrint("[KERNEL trampoline] Calling entry...\n");
+    proc->entry(proc->argc, proc->argv);
+    ncPrint("[KERNEL trampoline] Entry returned, exiting...\n");
     proc_exit(0);
     while (1) {
         _hlt();

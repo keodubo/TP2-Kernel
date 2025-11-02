@@ -1,4 +1,5 @@
 #include "include/sched.h"
+#include "include/naiveConsole.h"
 
 // Archivo: sched.c
 // Propósito: Implementación del planificador de procesos del kernel
@@ -151,6 +152,11 @@ uint64_t schedule(uint64_t cur_rsp) {
     if (next == NULL) {
         current = prev;
         return 0;
+    }
+
+    // Debug: imprimir cuando cambiamos de proceso
+    if (next != prev && next->pid >= 4 && next->pid <= 6) {
+        ncPrint("[SCHED] Switching to child process\n");
     }
 
     next->state = RUNNING;
