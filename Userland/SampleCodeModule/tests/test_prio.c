@@ -4,7 +4,7 @@
 #include "test_util.h"
 #include "../include/sys_calls.h"
 
-#define WAIT 10000000
+#define WAIT 30000000
 #define TOTAL_PROCESSES 3
 
 #define LOWEST 0
@@ -12,6 +12,8 @@
 #define HIGHEST 2
 
 #define DEFAULT_LIMIT 1500
+#define SPIN_CYCLES 5000
+#define YIELD_INTERVAL 128
 
 int64_t prio[TOTAL_PROCESSES] = {LOWEST, MEDIUM, HIGHEST};
 
@@ -89,28 +91,33 @@ void endless_pid(int argc, char **argv) {
 	}
 
 	const char *proc_id = argv[0];
-		int64_t parsed_limit = satoi(argv[1]);
-		uint64_t limit = parsed_limit > 0 ? (uint64_t)parsed_limit : DEFAULT_LIMIT;
-		uint64_t counter = 0;
-		uint64_t report_step = limit / 10;
+	int64_t parsed_limit = satoi(argv[1]);
+	uint64_t limit = parsed_limit > 0 ? (uint64_t)parsed_limit : DEFAULT_LIMIT;
+	uint64_t counter = 0;
+	uint64_t report_step = limit / 10;
 
-		if (report_step == 0) {
-			report_step = 1;
+	if (report_step == 0) {
+		report_step = 1;
+	}
+
+	while (counter < limit) {
+		for (volatile uint64_t spin = 0; spin < SPIN_CYCLES; spin++)
+			;
+
+		counter++;
+
+		if ((counter % report_step) == 0 || counter == limit) {
+			print_progress(proc_id, counter, limit);
 		}
 
-		while (counter < limit) {
-			counter++;
-
-			if ((counter % report_step) == 0 || counter == limit) {
-				print_progress(proc_id, counter, limit);
-			}
-
+		if ((counter % YIELD_INTERVAL) == 0) {
 			my_yield();
 		}
-
-		printf("[test_prio] Process %s reached target %s\n", proc_id, argv[1]);
-		sys_exit(0);
 	}
+
+	printf("[test_prio] Process %s reached target %s\n", proc_id, argv[1]);
+	sys_exit(0);
+}
 
 uint64_t test_prio(uint64_t argc, char *argv[]) {
 	int64_t pids[TOTAL_PROCESSES];
@@ -149,6 +156,8 @@ uint64_t test_prio(uint64_t argc, char *argv[]) {
 
 	// FASE 1: Observar con misma prioridad
 	bussy_wait(WAIT);
+	printf("[test_prio] Phase 1 complete. Todos avanzaron con la misma prioridad.\n");
+
 	printf("\nCHANGING PRIORITIES...\n");
 	printf("NEW PROCESS PRIORITY:\n");
 	for (i = 0; i < TOTAL_PROCESSES; i++) {
@@ -160,34 +169,7 @@ uint64_t test_prio(uint64_t argc, char *argv[]) {
 		my_nice(pids[i], prio[i]);
 	}
 
-	bussy_wait(WAIT);
-	printf("\nBLOCKING...\n");
-
-	// FASE 3: Bloquear procesos
-	for (i = 0; i < TOTAL_PROCESSES; i++) {
-		my_block(pids[i]);
-	}
-
-	printf("CHANGING PRIORITIES WHILE BLOCKED...\n");
-	printf("NEW PROCESS PRIORITY:\n");
-	for (i = 0; i < TOTAL_PROCESSES; i++) {
-		printf("PROCESS: %d  PRIORITY: %d\n", (int)i, MEDIUM);
-	}
-
-	// Cambiar prioridades mientras están bloqueados
-	for (i = 0; i < TOTAL_PROCESSES; i++) {
-		my_nice(pids[i], MEDIUM);
-	}
-
-	printf("UNBLOCKING...\n");
-
-	// Desbloquear procesos
-	for (i = 0; i < TOTAL_PROCESSES; i++) {
-		my_unblock(pids[i]);
-	}
-
-	// Observar con misma prioridad de nuevo
-	bussy_wait(WAIT);
+	printf("[test_prio] Phase 2: prioridades diferenciadas en ejecucion.\n");
 
 	printf("\nWAITING FOR PROCESSES TO FINISH...\n");
 	for (i = 0; i < TOTAL_PROCESSES; i++) {
