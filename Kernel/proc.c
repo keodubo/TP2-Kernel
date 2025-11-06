@@ -3,6 +3,8 @@
 #include "include/lib.h"
 #include "include/tty.h"
 #include "include/fd.h"
+#include "include/semaphore.h"
+#include "include/syscalls.h"
 #include "include/naiveConsole.h"
 
 // Gestion de procesos (PCB)
@@ -166,6 +168,11 @@ void proc_exit(int code) {
         return;
     }
 
+    ksem_remove_waiters_for(proc);
+
+    // Liberar todos los handles de semáforos que este proceso abrió
+    sem_cleanup_process_handles(proc->pid);
+
     // Si este proceso era el foreground, liberar la TTY
     if (proc->fg) {
         int parent_pid = proc->parent_pid;
@@ -314,6 +321,8 @@ int proc_kill(int pid) {
         return -1;
     }
 
+    ksem_remove_waiters_for(target);
+
     // Si el proceso a matar es foreground, devolver control al padre
     // No desbloqueamos manualmente al padre porque notify_parent_exit lo hara
     // automaticamente despues de preparar el resultado del wait
@@ -329,9 +338,8 @@ int proc_kill(int pid) {
             // Sin padre valido o padre muerto, buscar el shell principal
             pcb_t *shell_proc = NULL;
             for (int i = 0; i < MAX_PROCS; i++) {
-                if (procs[i].used && procs[i].state != EXITED && 
-                    (strcmp(procs[i].name, "shell") == 0 || 
-                     strcmp(procs[i].name, "kitty") == 0)) {
+                if (procs[i].used && procs[i].state != EXITED &&
+                    strcmp(procs[i].name, "shell") == 0) {
                     shell_proc = &procs[i];
                     break;
                 }

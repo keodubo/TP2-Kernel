@@ -1,12 +1,12 @@
 #include <sys_calls.h>
 #include <stdint.h>
 #include <userlib.h>
-#include <kitty.h>
+#include <sh.h>
 
 int main() {
 	welcome();
 
-	kitty();
+	sh_loop();
 
 	return 0;
 } 

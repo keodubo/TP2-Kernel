@@ -97,7 +97,13 @@ int sys_mm_get_stats(mm_stats_t *user_stats) {
     return 0;
 }
 
-static ksem_t *sem_handles[KSEM_HANDLE_MAX] = {0}; // Tabla de handles estilo POSIX
+// Handle con ownership para limpieza automática en proc_exit
+typedef struct sem_handle {
+    ksem_t *sem;
+    int owner_pid;
+} sem_handle_t;
+
+static sem_handle_t sem_handles[KSEM_HANDLE_MAX] = {0}; // Tabla de handles estilo POSIX
 
 // Helpers locales para proteger la tabla de handles
 static uint64_t irq_save_local(void) {
@@ -114,16 +120,27 @@ static void irq_restore_local(uint64_t flags) {
 }
 
 // Reserva un slot de handle para un semáforo abierto
-static int sem_handle_allocate(ksem_t *sem) {
+static int sem_handle_allocate(ksem_t *sem, int owner_pid) {
     uint64_t flags = irq_save_local();
+    int allocated_count = 0;
     for (int i = 0; i < KSEM_HANDLE_MAX; i++) {
-        if (sem_handles[i] == NULL) {
-            sem_handles[i] = sem;
+        if (sem_handles[i].sem != NULL) {
+            allocated_count++;
+        }
+        if (sem_handles[i].sem == NULL) {
+            sem_handles[i].sem = sem;
+            sem_handles[i].owner_pid = owner_pid;
             irq_restore_local(flags);
             return i + 1;
         }
     }
+    // DEBUG: Table is full - log it
     irq_restore_local(flags);
+    extern void ncPrintDec(uint64_t value);
+    extern void ncPrint(const char *string);
+    ncPrint("[KERNEL] Handle table FULL! ");
+    ncPrintDec(allocated_count);
+    ncPrint(" handles allocated\n");
     return -1;
 }
 
@@ -133,7 +150,7 @@ static ksem_t *sem_handle_peek(int handle) {
         return NULL;
     }
     uint64_t flags = irq_save_local();
-    ksem_t *sem = sem_handles[handle - 1];
+    ksem_t *sem = sem_handles[handle - 1].sem;
     irq_restore_local(flags);
     return sem;
 }
@@ -144,22 +161,66 @@ static ksem_t *sem_handle_detach(int handle) {
         return NULL;
     }
     uint64_t flags = irq_save_local();
-    ksem_t *sem = sem_handles[handle - 1];
+    ksem_t *sem = sem_handles[handle - 1].sem;
     if (sem != NULL) {
-        sem_handles[handle - 1] = NULL;
+        sem_handles[handle - 1].sem = NULL;
+        sem_handles[handle - 1].owner_pid = 0;
     }
     irq_restore_local(flags);
     return sem;
 }
 
+// Limpia todos los handles de semáforos pertenecientes a un proceso
+// Llamado desde proc_exit para evitar leaks
+void sem_cleanup_process_handles(int pid) {
+    extern void ncPrintDec(uint64_t value);
+    extern void ncPrint(const char *string);
+    int cleaned = 0;
+
+    uint64_t flags = irq_save_local();
+    for (int i = 0; i < KSEM_HANDLE_MAX; i++) {
+        if (sem_handles[i].sem != NULL && sem_handles[i].owner_pid == pid) {
+            ksem_t *sem = sem_handles[i].sem;
+            sem_handles[i].sem = NULL;
+            sem_handles[i].owner_pid = 0;
+            cleaned++;
+            // Liberar el lock antes de cerrar (ksem_close puede bloquear/yield)
+            irq_restore_local(flags);
+            ksem_close(sem);
+            flags = irq_save_local();
+        }
+    }
+    irq_restore_local(flags);
+
+    if (cleaned > 0) {
+        ncPrint("[KERNEL] Cleaned ");
+        ncPrintDec(cleaned);
+        ncPrint(" handles for PID ");
+        ncPrintDec(pid);
+        ncPrint("\n");
+    }
+}
+
 int sys_sem_open(const char *name, unsigned int init) {
+    pcb_t *cur = sched_current();
+    if (cur == NULL) {
+        return -1;
+    }
+
     ksem_t *sem = NULL;
     if (ksem_open(name, init, &sem) != 0) {
         return -1;
     }
 
-    int handle = sem_handle_allocate(sem);
+    int handle = sem_handle_allocate(sem, cur->pid);
     if (handle < 0) {
+        // DEBUG: Handle table full
+        extern void ncPrintDec(uint64_t value);
+        extern void ncNewline(void);
+        extern void ncPrint(const char *string);
+        ncPrint("[KERNEL] sem_open failed for PID ");
+        ncPrintDec(cur->pid);
+        ncPrint(" - handle table full\n");
         ksem_close(sem);
         return -1;
     }

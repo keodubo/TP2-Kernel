@@ -21,6 +21,7 @@ int      sys_sem_wait(int sem_id);
 int      sys_sem_post(int sem_id);
 int      sys_sem_close(int sem_id);
 int      sys_sem_unlink(const char *name);
+void     sem_cleanup_process_handles(int pid);  // Cleanup en proc_exit
 int      sys_mm_get_stats(mm_stats_t *stats);
 
 // Pipes (Hito 5)

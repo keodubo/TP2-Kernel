@@ -16,8 +16,8 @@ static void pipe_name_copy(char *dst, const char *src);
 static uint64_t irq_save(void);                      // Helpers críticos
 static void irq_restore(uint64_t flags);
 static void pipe_free(kpipe_t *p);
-static void enqueue_reader(kpipe_t *p, pcb_t *proc); // Manejo de waiters
-static void enqueue_writer(kpipe_t *p, pcb_t *proc);
+static void enqueue_reader(kpipe_t *p, pcb_t *proc, pipe_waiter_t *w); // Manejo de waiters
+static void enqueue_writer(kpipe_t *p, pcb_t *proc, pipe_waiter_t *w);
 static pcb_t* dequeue_reader(kpipe_t *p);
 static pcb_t* dequeue_writer(kpipe_t *p);
 
@@ -86,8 +86,7 @@ static void pipe_free(kpipe_t *p) {
     mm_free(p);
 }
 
-static void enqueue_reader(kpipe_t *p, pcb_t *proc) {
-    pipe_waiter_t *w = (pipe_waiter_t *)mm_malloc(sizeof(pipe_waiter_t));
+static void enqueue_reader(kpipe_t *p, pcb_t *proc, pipe_waiter_t *w) {
     if (w == NULL) return;
     
     w->proc = proc;
@@ -101,8 +100,7 @@ static void enqueue_reader(kpipe_t *p, pcb_t *proc) {
     }
 }
 
-static void enqueue_writer(kpipe_t *p, pcb_t *proc) {
-    pipe_waiter_t *w = (pipe_waiter_t *)mm_malloc(sizeof(pipe_waiter_t));
+static void enqueue_writer(kpipe_t *p, pcb_t *proc, pipe_waiter_t *w) {
     if (w == NULL) return;
     
     w->proc = proc;
@@ -326,8 +324,35 @@ int kpipe_read(kpipe_t *p, void *buf, int n) {
             return -1;
         }
         
-        enqueue_reader(p, current);
-        
+        // Pre-allocate waiter BEFORE it's needed (still in critical section but before enqueue)
+        // We need to temporarily exit critical section to allocate
+        irq_restore(flags);
+
+        pipe_waiter_t *waiter = (pipe_waiter_t *)mm_malloc(sizeof(pipe_waiter_t));
+        if (waiter == NULL) {
+            return -1;  // Memory allocation failed
+        }
+
+        // Re-enter critical section
+        flags = irq_save();
+
+        // Double-check conditions after re-entering (they might have changed)
+        if (p->size > 0) {
+            // Data became available while we were allocating
+            irq_restore(flags);
+            mm_free(waiter);
+            continue;  // Retry read
+        }
+
+        if (p->writers == 0) {
+            // Writers closed while we were allocating
+            irq_restore(flags);
+            mm_free(waiter);
+            return total_read;
+        }
+
+        enqueue_reader(p, current, waiter);
+
         // *** FIX: Marcar como BLOQUEADO dentro de la sección crítica
         // (previene lost wakeup, igual que en semáforos)
         current->state = BLOCKED;
@@ -403,8 +428,28 @@ int kpipe_write(kpipe_t *p, const void *buf, int n) {
             return -1;
         }
         
-        enqueue_writer(p, current);
-        
+        // Pre-allocate waiter BEFORE it's needed
+        // Temporarily exit critical section to allocate
+        irq_restore(flags);
+
+        pipe_waiter_t *waiter = (pipe_waiter_t *)mm_malloc(sizeof(pipe_waiter_t));
+        if (waiter == NULL) {
+            return -1;  // Memory allocation failed
+        }
+
+        // Re-enter critical section
+        flags = irq_save();
+
+        // Double-check conditions after re-entering
+        if (p->size < PIPE_CAP) {
+            // Space became available while we were allocating
+            irq_restore(flags);
+            mm_free(waiter);
+            continue;  // Retry write
+        }
+
+        enqueue_writer(p, current, waiter);
+
         // *** FIX: Marcar como BLOQUEADO dentro de la sección crítica
         current->state = BLOCKED;
         current->ticks_left = 0;

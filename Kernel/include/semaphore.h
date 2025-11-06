@@ -33,5 +33,6 @@ int ksem_wait(ksem_t *sem);
 int ksem_post(ksem_t *sem);
 int ksem_close(ksem_t *sem);
 int ksem_unlink(const char *name);
+void ksem_remove_waiters_for(pcb_t *proc);
 
 #endif

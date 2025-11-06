@@ -1,10 +1,10 @@
-#ifndef _KITTY_H_
-#define _KITTY_H_
+#ifndef _SH_H_
+#define _SH_H_
 
 #include <stdio.h>
 #include "userlib.h"
 
-// Constantes y prototipos de la shell interactiva "kitty"
+// Constantes y prototipos de la shell interactiva "sh"
 #define MAX_BUFF 254
 #define MAX_COMMAND 20
 #define MAX_ARGS 32
@@ -14,7 +14,7 @@
 #define PLUS '+'
 #define MINUS '-'
 
-void kitty();
+void sh_loop();
 
 void printHelp();
 void newLine();
@@ -42,7 +42,6 @@ void cmd_test_synchro();
 void cmd_debug();
 void cmd_ps();
 void cmd_loop();
-void cmd_mvar();
 void cmd_nice();
 void cmd_kill();
 void cmd_yield();

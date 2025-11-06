@@ -48,8 +48,7 @@ static void irq_restore_local(uint64_t flags) {
     }
 }
 
-static void enqueue_waiter(tty_t *t, pcb_t *proc) {
-    tty_waiter_t *node = (tty_waiter_t *)mm_malloc(sizeof(tty_waiter_t));
+static void enqueue_waiter(tty_t *t, pcb_t *proc, tty_waiter_t *node) {
     if (node == NULL) {
         return;
     }
@@ -130,7 +129,27 @@ int tty_read(tty_t *t, void *buf, int n) {
             return -1;
         }
 
-        enqueue_waiter(t, current);
+        // Pre-allocate waiter before it's needed
+        // Temporarily exit critical section to allocate
+        irq_restore_local(flags);
+
+        tty_waiter_t *waiter = (tty_waiter_t *)mm_malloc(sizeof(tty_waiter_t));
+        if (waiter == NULL) {
+            return -1;  // Memory allocation failed
+        }
+
+        // Re-enter critical section
+        flags = irq_save_local();
+
+        // Double-check conditions after re-entering
+        if (t->size > 0 || t->eof) {
+            // Data became available or EOF while we were allocating
+            irq_restore_local(flags);
+            mm_free(waiter);
+            continue;  // Retry read
+        }
+
+        enqueue_waiter(t, current, waiter);
         current->state = BLOCKED;
         current->ticks_left = 0;
 

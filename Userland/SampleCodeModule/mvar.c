@@ -1,442 +1,345 @@
 #include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <userlib.h>
 #include <sys_calls.h>
+#include "mvar.h"
 
-#include "tests/syscall.h"
+// Simple MVar implementation following the specification:
+// - Writers wait for empty, write value, signal full
+// - Readers wait for full, read value, signal empty
+// - Both do random active wait before each operation
 
-extern char parameter[];
+#define MVAR_MAX_INSTANCES 4
+#define SEM_NAME_LEN 32
+#define NAME_LEN 32
 
 typedef struct {
-	volatile char slot;
-	volatile int has_value;
-} mvar_cell_t;
+	const char *label;
+	const Color *color;
+} reader_profile_t;
+
+static const reader_profile_t reader_palette[] = {
+	{"red", &RED},
+	{"green", &GREEN},
+	{"blue", &BLUE},
+	{"yellow", &YELLOW},
+	{"cyan", &CYAN},
+	{"orange", &ORANGE},
+	{"purple", &PURPLE},
+	{"pink", &PINK},
+	{"lightgreen", &LIGHT_GREEN},
+	{"lightblue", &LIGHT_BLUE},
+	{"lightpurple", &LIGHT_PURPLE},
+	{"lightorange", &LIGHT_ORANGE},
+	{"lightyellow", &LIGHT_YELLOW},
+	{"lightpink", &LIGHT_PINK}
+};
+
+static const int reader_palette_len = (int)(sizeof(reader_palette) / sizeof(reader_palette[0]));
 
 typedef struct {
-	mvar_cell_t cell;
-	char sem_empty[32];
-	char sem_full[32];
-	char sem_mutex[32];
-	int writer_count;
-	int reader_count;
-	uint64_t instance_id;
-} mvar_shared_state_t;
+	int in_use;
+	int id;
+	volatile char value;  // The MVar value
+	char sem_empty_name[SEM_NAME_LEN];
+	char sem_full_name[SEM_NAME_LEN];
+} mvar_context_t;
 
-static void mvar_writer_entry(int argc, char **argv);
-static void mvar_reader_entry(int argc, char **argv);
-static void busy_wait_random(uint32_t salt);
-static int spawn_mvar_writer(mvar_shared_state_t *shared, int index);
-static int spawn_mvar_reader(mvar_shared_state_t *shared, int index);
-static char *alloc_string_from_value(uint64_t value);
-static void free_spawn_args_local(char **argv, int argc);
-static int parse_positive_count(const char *token, int *out_value);
-static int parse_mvar_args(const char *input, int *writers, int *readers);
-static Color pick_reader_color(int index);
+static mvar_context_t contexts[MVAR_MAX_INSTANCES] = {0};
+static int next_context_id = 1;
 
-void cmd_mvar(void) {
-	int writers = 0;
-	int readers = 0;
+// Simple xorshift PRNG for random delays
+static uint32_t mvar_rand(uint32_t *state) {
+	uint32_t x = *state;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	*state = x;
+	return x;
+}
 
-	if (!parse_mvar_args(parameter, &writers, &readers)) {
-		printf("Usage: mvar <writers> <readers>\n");
-		return;
+// Random active wait as per specification
+static void mvar_random_wait(uint32_t *rand_state) {
+	// Random delay between ~10K and ~500K iterations
+	uint32_t delay = (mvar_rand(rand_state) % 490000) + 10000;
+	for (volatile uint32_t i = 0; i < delay; i++) {
+		// Active (busy) wait
 	}
+}
 
-	mvar_shared_state_t *shared = (mvar_shared_state_t *)sys_malloc(sizeof(mvar_shared_state_t));
-	if (shared == NULL) {
-		printf("[mvar] ERROR: unable to allocate shared state\n");
-		return;
-	}
-
-	memset(shared, 0, sizeof(*shared));
-	shared->cell.slot = 0;
-	shared->cell.has_value = 0;
-	shared->writer_count = writers;
-	shared->reader_count = readers;
-
-	static uint32_t mvar_sequence = 0;
-	uint32_t seq = ++mvar_sequence;
-	int64_t caller_pid = sys_getpid();
-
-	sprintf(shared->sem_empty, "mvarE_%ld_%u", (long)caller_pid, seq);
-	sprintf(shared->sem_full, "mvarF_%ld_%u", (long)caller_pid, seq);
-	sprintf(shared->sem_mutex, "mvarM_%ld_%u", (long)caller_pid, seq);
-	shared->instance_id = ((uint64_t)caller_pid << 32) ^ seq;
-
-	// Inicializar los semáforos ANTES de crear los procesos hijos
-	// Esto asegura que el primer proceso que los use tenga los valores correctos
-	// sem_empty = 1 (MVar vacío, puede escribir)
-	// sem_full = 0 (MVar vacío, no puede leer)
-	// sem_mutex = 1 (desbloqueado)
-	// Los hijos abrirán los semáforos por nombre y compartirán las mismas instancias del kernel
-	// NO cerramos los semáforos - los dejamos abiertos para que los hijos puedan encontrarlos
-	// Los semáforos persistirán hasta que todos los procesos (incluido el padre) terminen
-	int tmp_empty = my_sem_open(shared->sem_empty, 1);
-	int tmp_full = my_sem_open(shared->sem_full, 0);
-	int tmp_mutex = my_sem_open(shared->sem_mutex, 1);
-	
-	if (tmp_empty < 0 || tmp_full < 0 || tmp_mutex < 0) {
-		printf("[mvar] ERROR: unable to initialize semaphores\n");
-		sys_free(shared);
-		return;
-	}
-	
-	// No cerramos los semáforos aquí - los hijos los abrirán por nombre y encontrarán
-	// las instancias existentes del kernel. Cuando el proceso principal termine,
-	// los handles locales se limpiarán automáticamente.
-
-	printf("[mvar] Launching %d writer(s) and %d reader(s)\n", writers, readers);
-
-	int error = 0;
-
-	for (int i = 0; i < writers; i++) {
-		if (spawn_mvar_writer(shared, i) < 0) {
-			error = 1;
-			break;
+static mvar_context_t *mvar_get_context(int id) {
+	for (int i = 0; i < MVAR_MAX_INSTANCES; i++) {
+		if (contexts[i].in_use && contexts[i].id == id) {
+			return &contexts[i];
 		}
 	}
+	return NULL;
+}
 
-	if (!error) {
-		for (int i = 0; i < readers; i++) {
-			if (spawn_mvar_reader(shared, i) < 0) {
-				error = 1;
-				break;
-			}
+static mvar_context_t *mvar_allocate_context(void) {
+	for (int i = 0; i < MVAR_MAX_INSTANCES; i++) {
+		if (!contexts[i].in_use) {
+			mvar_context_t *ctx = &contexts[i];
+			ctx->in_use = 1;
+			ctx->id = next_context_id++;
+			ctx->value = 0;
+			sprintf(ctx->sem_empty_name, "mvar_empty_%d", ctx->id);
+			sprintf(ctx->sem_full_name, "mvar_full_%d", ctx->id);
+			return ctx;
 		}
 	}
-
-	if (error) {
-		printf("[mvar] WARNING: failed to launch all participants. Some processes may still be running.\n");
-	} else {
-		printf("[mvar] Processes running in background. Use ps/kill/nice as needed.\n");
-	}
+	return NULL;
 }
 
-static const char *reader_name_for_index(int index) {
-    static const char *names[] = {"r-red","r-grn","r-blu","r-yel","r-cyn","r-mag"};
-    int n = (int)(sizeof(names)/sizeof(names[0]));
-    if (index >= 0 && index < n) return names[index];
-    return NULL; // llamador puede generar r-<idx>
-}
-
-static int spawn_mvar_writer(mvar_shared_state_t *shared, int index) {
-    char **argv = (char **)sys_malloc(sizeof(char *) * 4);
-	if (argv == NULL) {
-		printf("[mvar] ERROR: unable to allocate argv for writer %d\n", index);
-		return -1;
-	}
-
-	argv[0] = alloc_string_from_value((uint64_t)(uintptr_t)shared);
-	argv[1] = alloc_string_from_value((uint64_t)index);
-    // argv[2] = nombre lógico del proceso para que el hijo lo imprima
-    char pname[8];
-    char letter = (char)('A' + (index % 26));
-    sprintf(pname, "w-%c", letter);
-    argv[2] = (char *)sys_malloc(strlen(pname) + 1);
-    if (argv[2] != NULL) {
-        strcpy(argv[2], pname);
-    }
-    argv[3] = NULL;
-
-    if (argv[0] == NULL || argv[1] == NULL || argv[2] == NULL) {
-        free_spawn_args_local(argv, 3);
-		sys_free(argv);
-		printf("[mvar] ERROR: unable to prepare arguments for writer %d\n", index);
-		return -1;
-	}
-
-    char name[32];
-    sprintf(name, "w-%c", letter);
-
-    // CORRECCIÓN STARDVATION: Todos los escritores usan la misma prioridad (DEFAULT_PRIORITY)
-    // para evitar starvation. Si se quiere que un escritor aparezca más frecuentemente que otro,
-    // se debe hacer ajustando el busy_wait_random, no con prioridades diferentes.
-    // El scheduler estricto por prioridad causaba que escritores con menor prioridad nunca ejecutaran.
-    uint8_t prio = DEFAULT_PRIORITY;
-
-    int64_t pid = sys_create_process_ex(mvar_writer_entry, 3, argv, name, prio, 0);
-	if (pid < 0) {
-        free_spawn_args_local(argv, 3);
-		sys_free(argv);
-		printf("[mvar] ERROR: failed to spawn writer %d\n", index);
-		return -1;
-	}
-
-	printf("[mvar] writer[%d] -> PID %ld (letter %c)\n", index, (long)pid, letter);
-	return 0;
-}
-
-static int spawn_mvar_reader(mvar_shared_state_t *shared, int index) {
-    char **argv = (char **)sys_malloc(sizeof(char *) * 4);
-	if (argv == NULL) {
-		printf("[mvar] ERROR: unable to allocate argv for reader %d\n", index);
-		return -1;
-	}
-
-	argv[0] = alloc_string_from_value((uint64_t)(uintptr_t)shared);
-	argv[1] = alloc_string_from_value((uint64_t)index);
-    const char *rname = reader_name_for_index(index);
-    char buf[16];
-    if (rname == NULL) {
-        sprintf(buf, "r-%d", index);
-        rname = buf;
-    }
-    argv[2] = (char *)sys_malloc(strlen(rname) + 1);
-    if (argv[2] != NULL) {
-        strcpy(argv[2], rname);
-    }
-    argv[3] = NULL;
-
-    if (argv[0] == NULL || argv[1] == NULL || argv[2] == NULL) {
-        free_spawn_args_local(argv, 3);
-		sys_free(argv);
-		printf("[mvar] ERROR: unable to prepare arguments for reader %d\n", index);
-		return -1;
-	}
-
-    char name[32];
-    sprintf(name, "%s", argv[2]);
-
-    // Lectores usan MAX_PRIORITY cuando hay menos lectores que escritores
-    // para consumir rápidamente y dar más oportunidades a todos los escritores
-    // (que tienen la misma prioridad entre sí)
-    uint8_t reader_prio = DEFAULT_PRIORITY;
-    if (shared->writer_count > shared->reader_count) {
-        reader_prio = MAX_PRIORITY;
-    }
-
-    int64_t pid = sys_create_process_ex(mvar_reader_entry, 3, argv, name, reader_prio, 0);
-	if (pid < 0) {
-        free_spawn_args_local(argv, 3);
-		sys_free(argv);
-		printf("[mvar] ERROR: failed to spawn reader %d\n", index);
-		return -1;
-	}
-
-	printf("[mvar] reader[%d] -> PID %ld\n", index, (long)pid);
-	return 0;
-}
-
-static char *alloc_string_from_value(uint64_t value) {
-	char buffer[32];
-	sprintf(buffer, "%ld", (int64_t)value);
-	size_t len = strlen(buffer) + 1;
-	char *out = (char *)sys_malloc(len);
-	if (out == NULL) {
-		return NULL;
-	}
-	strcpy(out, buffer);
-	return out;
-}
-
-static void free_spawn_args_local(char **argv, int argc) {
-	if (argv == NULL) {
-		return;
-	}
-	for (int i = 0; i < argc; i++) {
-		if (argv[i] != NULL) {
-			sys_free(argv[i]);
-		}
-	}
-}
-
-static int parse_positive_count(const char *token, int *out_value) {
-	if (token == NULL || out_value == NULL || token[0] == '\0') {
-		return 0;
-	}
-	int value = 0;
-	for (int i = 0; token[i] != '\0'; i++) {
-		if (token[i] < '0' || token[i] > '9') {
-			return 0;
-		}
-		value = value * 10 + (token[i] - '0');
-		if (value > 999999) {
-			return 0;
-		}
-	}
-	if (value < 1) {
-		return 0;
-	}
-	*out_value = value;
-	return 1;
-}
-
-static int parse_mvar_args(const char *input, int *writers, int *readers) {
-	if (input == NULL) {
-		return 0;
-	}
-
-	char token0[32] = {0};
-	char token1[32] = {0};
-
-	int idx = 0;
-	int t0 = 0;
-	while (input[idx] == ' ') {
-		idx++;
-	}
-	while (input[idx] != '\0' && input[idx] != ' ') {
-		if (t0 < (int)(sizeof(token0) - 1)) {
-			token0[t0++] = input[idx];
-		}
-		idx++;
-	}
-	token0[t0] = '\0';
-
-	while (input[idx] == ' ') {
-		idx++;
-	}
-
-	int t1 = 0;
-	while (input[idx] != '\0' && input[idx] != ' ') {
-		if (t1 < (int)(sizeof(token1) - 1)) {
-			token1[t1++] = input[idx];
-		}
-		idx++;
-	}
-	token1[t1] = '\0';
-
-	while (input[idx] == ' ') {
-		idx++;
-	}
-	if (input[idx] != '\0') {
-		return 0;
-	}
-
-	if (!parse_positive_count(token0, writers)) {
-		return 0;
-	}
-	if (!parse_positive_count(token1, readers)) {
-		return 0;
-	}
-	return 1;
-}
-
-static void busy_wait_random(uint32_t salt) {
-	uint32_t state = (uint32_t)(my_getpid() ^ salt ^ 0x9E3779B9u);
-	state ^= state << 13;
-	state ^= state >> 17;
-	state ^= state << 5;
-	uint32_t spins = 2000u + (state & 0x3FFFu);
-	for (uint32_t i = 0; i < spins; i++) {
-		if ((i & 0x3Fu) == 0) {
-			my_yield();
-		}
-	}
-}
-
-static void mvar_writer_entry(int argc, char **argv) {
-    if (argc < 3 || argv == NULL) {
+// Writer process: performs random wait, waits for empty, writes, signals full
+static void mvar_writer_process(int argc, char **argv) {
+	if (argc < 3) {
 		sys_exit(-1);
 		return;
 	}
 
-	mvar_shared_state_t *shared = (mvar_shared_state_t *)(uintptr_t)charToInt(argv[0]);
-    int index = atoi(argv[1]);
-    const char *selfname = (argv[2] != NULL) ? argv[2] : "w";
+	int context_id = atoi(argv[0]);
+	int writer_idx = atoi(argv[1]);
+	char letter = argv[2][0];
 
-	free_spawn_args_local(argv, argc);
-	sys_free(argv);
+	// Clean up argv
+	if (argv) {
+		free(argv);
+	}
 
-    if (shared == NULL) {
+	mvar_context_t *ctx = mvar_get_context(context_id);
+	if (ctx == NULL) {
 		sys_exit(-1);
 		return;
 	}
 
-	if (my_sem_open(shared->sem_empty, 1) < 0 ||
-		my_sem_open(shared->sem_full, 0) < 0 ||
-		my_sem_open(shared->sem_mutex, 1) < 0) {
-		printf("[mvar-w%d] semaphore setup failed\n", index);
+	// Open semaphores
+	int sem_empty = (int)sys_sem_open(ctx->sem_empty_name, 1);
+	int sem_full = (int)sys_sem_open(ctx->sem_full_name, 0);
+
+	if (sem_empty < 0 || sem_full < 0) {
+		if (sem_empty >= 0) sys_sem_close(sem_empty);
+		if (sem_full >= 0) sys_sem_close(sem_full);
 		sys_exit(-1);
 		return;
 	}
 
-    printf("[mvar] %s pid=%ld\n", selfname, (long)my_getpid());
-
-    while (1) {
-		busy_wait_random((uint32_t)(shared->instance_id + (uint32_t)index * 37u));
-		my_sem_wait(shared->sem_empty);
-		my_sem_wait(shared->sem_mutex);
-
-		char letter = (char)('A' + (index % 26));
-		shared->cell.slot = letter;
-		shared->cell.has_value = 1;
-
-		my_sem_post(shared->sem_mutex);
-		my_sem_post(shared->sem_full);
-	}
-}
-
-static void mvar_reader_entry(int argc, char **argv) {
-    if (argc < 3 || argv == NULL) {
-		sys_exit(-1);
-		return;
-	}
-
-	mvar_shared_state_t *shared = (mvar_shared_state_t *)(uintptr_t)charToInt(argv[0]);
-    int index = atoi(argv[1]);
-    const char *selfname = (argv[2] != NULL) ? argv[2] : "reader";
-
-	free_spawn_args_local(argv, argc);
-	sys_free(argv);
-
-	if (shared == NULL) {
-		sys_exit(-1);
-		return;
-	}
-
-	if (my_sem_open(shared->sem_empty, 1) < 0 ||
-		my_sem_open(shared->sem_full, 0) < 0 ||
-		my_sem_open(shared->sem_mutex, 1) < 0) {
-		printf("[mvar-r%d] semaphore setup failed\n", index);
-		sys_exit(-1);
-		return;
-	}
-
-    Color color = pick_reader_color(index);
-    printf("[mvar] %s pid=%ld\n", selfname, (long)my_getpid());
+	// Initialize random seed with PID + index
+	uint32_t rand_state = (uint32_t)sys_getpid() + (uint32_t)writer_idx * 7919;
 
 	while (1) {
-		busy_wait_random((uint32_t)(shared->instance_id + (uint32_t)index * 131u));
-		my_sem_wait(shared->sem_full);
-		my_sem_wait(shared->sem_mutex);
+		// SPECIFICATION: "Each writer performs a random active wait"
+		mvar_random_wait(&rand_state);
 
-		char value = shared->cell.slot;
-		shared->cell.has_value = 0;
+		// Wait for MVar to be empty (only one writer can get this at a time)
+		sys_sem_wait(sem_empty);
 
+		// Write the value
+		ctx->value = letter;
+
+		// Signal that MVar is full (allow one reader to proceed)
+		sys_sem_post(sem_full);
+	}
+}
+
+// Reader process: performs random wait, waits for full, reads, signals empty
+static void mvar_reader_process(int argc, char **argv) {
+	if (argc < 3) {
+		sys_exit(-1);
+		return;
+	}
+
+	int context_id = atoi(argv[0]);
+	int reader_idx = atoi(argv[1]);
+	int color_idx = atoi(argv[2]);
+
+	// Clean up argv
+	if (argv) {
+		free(argv);
+	}
+
+	mvar_context_t *ctx = mvar_get_context(context_id);
+	if (ctx == NULL) {
+		sys_exit(-1);
+		return;
+	}
+
+	// Open semaphores
+	int sem_empty = (int)sys_sem_open(ctx->sem_empty_name, 1);
+	int sem_full = (int)sys_sem_open(ctx->sem_full_name, 0);
+
+	if (sem_empty < 0 || sem_full < 0) {
+		if (sem_empty >= 0) sys_sem_close(sem_empty);
+		if (sem_full >= 0) sys_sem_close(sem_full);
+		sys_exit(-1);
+		return;
+	}
+
+	const reader_profile_t *profile = &reader_palette[color_idx % reader_palette_len];
+	Color color = *profile->color;
+
+	// Initialize random seed with PID + index
+	uint32_t rand_state = (uint32_t)sys_getpid() + (uint32_t)reader_idx * 7919;
+
+	while (1) {
+		// SPECIFICATION: "Each reader performs a random active wait"
+		mvar_random_wait(&rand_state);
+
+		// Wait for MVar to be full (only one reader can get this at a time)
+		sys_sem_wait(sem_full);
+
+		// Read and consume the value (critical section)
+		char value = ctx->value;
+
+		// Signal that MVar is empty (allow one writer to proceed)
+		sys_sem_post(sem_empty);
+
+		// Print AFTER releasing the lock (outside critical section)
 		printcColor(value, color);
 
-		my_sem_post(shared->sem_mutex);
-		my_sem_post(shared->sem_empty);
+		// Add a busy wait to slow down output for better visibility
+		for (volatile uint32_t i = 0; i < 5000000; i++) {
+			// Busy wait
+		}
 	}
 }
 
-static Color pick_reader_color(int index) {
-	static const Color *palette[] = {
-		&LIGHT_RED,
-		&LIGHT_GREEN,
-		&LIGHT_BLUE,
-		&LIGHT_ORANGE,
-		&LIGHT_PURPLE,
-		&LIGHT_YELLOW,
-		&CYAN,
-		&ORANGE,
-		&GREEN,
-		&PINK,
-		&PURPLE,
-		&YELLOW,
-		&BLUE
-	};
-	const int palette_size = (int)(sizeof(palette) / sizeof(palette[0]));
-	if (palette_size <= 0) {
-		Color fallback = {255, 255, 255};
-		return fallback;
+int mvar_start(int writer_count, int reader_count, mvar_launch_info_t *out_info) {
+	if (writer_count <= 0 || reader_count <= 0 ||
+	    writer_count > MVAR_MAX_WRITERS || reader_count > MVAR_MAX_READERS) {
+		return -1;
 	}
-	const Color *selected = palette[index % palette_size];
-	if (selected == NULL) {
-		Color fallback = {255, 255, 255};
-		return fallback;
+
+	mvar_context_t *ctx = mvar_allocate_context();
+	if (ctx == NULL) {
+		return -1;
 	}
-	return *selected;
+
+	// Pre-create semaphores in parent process
+	int sem_empty = (int)sys_sem_open(ctx->sem_empty_name, 1);  // Start with 1 (empty)
+	int sem_full = (int)sys_sem_open(ctx->sem_full_name, 0);   // Start with 0 (not full)
+
+	if (sem_empty < 0 || sem_full < 0) {
+		if (sem_empty >= 0) sys_sem_close(sem_empty);
+		if (sem_full >= 0) sys_sem_close(sem_full);
+		ctx->in_use = 0;
+		return -1;
+	}
+
+	// Close parent's handles (children will open their own)
+	sys_sem_close(sem_empty);
+	sys_sem_close(sem_full);
+
+	// Prepare output info
+	if (out_info != NULL) {
+		out_info->context_id = ctx->id;
+		out_info->writer_count = writer_count;
+		out_info->reader_count = reader_count;
+		for (int i = 0; i < MVAR_MAX_WRITERS; i++) {
+			out_info->writer_pids[i] = -1;
+			out_info->writer_names[i][0] = '\0';
+		}
+		for (int i = 0; i < MVAR_MAX_READERS; i++) {
+			out_info->reader_pids[i] = -1;
+			out_info->reader_names[i][0] = '\0';
+		}
+	}
+
+	// Spawn writers
+	char context_id_str[16];
+	sprintf(context_id_str, "%d", ctx->id);
+
+	for (int w = 0; w < writer_count; w++) {
+		char **argv = (char **)malloc(sizeof(char *) * 4);
+		if (argv == NULL) {
+			// TODO: cleanup spawned processes
+			return -1;
+		}
+
+		char *arg0 = (char *)malloc(16);
+		char *arg1 = (char *)malloc(16);
+		char *arg2 = (char *)malloc(4);
+		if (!arg0 || !arg1 || !arg2) {
+			if (arg0) free(arg0);
+			if (arg1) free(arg1);
+			if (arg2) free(arg2);
+			free(argv);
+			return -1;
+		}
+
+		sprintf(arg0, "%d", ctx->id);
+		sprintf(arg1, "%d", w);
+		sprintf(arg2, "%c", 'A' + (w % 26));
+
+		argv[0] = arg0;
+		argv[1] = arg1;
+		argv[2] = arg2;
+		argv[3] = NULL;
+
+		char name[NAME_LEN];
+		sprintf(name, "mvar-writer-%c", 'A' + (w % 26));
+
+		int pid = (int)sys_create_process_ex(mvar_writer_process, 3, argv, name, DEFAULT_PRIORITY, 0);
+
+		if (pid < 0) {
+			// TODO: cleanup
+			return -1;
+		}
+
+		if (out_info != NULL) {
+			out_info->writer_pids[w] = pid;
+			sprintf(out_info->writer_names[w], "mvar-writer-%c", 'A' + (w % 26));
+		}
+	}
+
+	// Spawn readers
+	for (int r = 0; r < reader_count; r++) {
+		char **argv = (char **)malloc(sizeof(char *) * 4);
+		if (argv == NULL) {
+			// TODO: cleanup spawned processes
+			return -1;
+		}
+
+		char *arg0 = (char *)malloc(16);
+		char *arg1 = (char *)malloc(16);
+		char *arg2 = (char *)malloc(16);
+		if (!arg0 || !arg1 || !arg2) {
+			if (arg0) free(arg0);
+			if (arg1) free(arg1);
+			if (arg2) free(arg2);
+			free(argv);
+			return -1;
+		}
+
+		sprintf(arg0, "%d", ctx->id);
+		sprintf(arg1, "%d", r);
+		sprintf(arg2, "%d", r % reader_palette_len);
+
+		argv[0] = arg0;
+		argv[1] = arg1;
+		argv[2] = arg2;
+		argv[3] = NULL;
+
+		const reader_profile_t *profile = &reader_palette[r % reader_palette_len];
+		char name[NAME_LEN];
+		sprintf(name, "mvar-reader-%s", profile->label);
+
+		int pid = (int)sys_create_process_ex(mvar_reader_process, 3, argv, name, DEFAULT_PRIORITY, 0);
+
+		if (pid < 0) {
+			// TODO: cleanup
+			return -1;
+		}
+
+		if (out_info != NULL) {
+			out_info->reader_pids[r] = pid;
+			sprintf(out_info->reader_names[r], "mvar-reader-%s", profile->label);
+		}
+	}
+
+	// SPECIFICATION: "The main process must terminate immediately after creating readers and writers"
+	// We don't wait or cleanup - just return
+
+	return 0;
 }
+

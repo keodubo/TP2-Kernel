@@ -267,27 +267,6 @@ test_synchro 5 0       # Sin semáforos (igual que test_no_synchro)
 - `sys_pipe_close(int fd)`: Cierra el file descriptor del pipe.
 - `sys_pipe_unlink(const char* name)`: Elimina el pipe cuando todas las referencias están cerradas.
 
-#### Comando mvar
-
-Implementa un "Mutable Variable" (MVar) usando semáforos y pipes:
-
-```bash
-mvar <writers> <readers>
-```
-
-**Descripción:**
-- Crea `writers` procesos escritores y `readers` procesos lectores.
-- Los escritores escriben letras ('A', 'B', ...) al MVar.
-- Los lectores consumen las letras y las imprimen en color.
-- Coordinación mediante semáforos: solo un escritor puede escribir a la vez, solo un lector puede leer a la vez.
-
-**Ejemplo:**
-```bash
-mvar 2 2 &    # 2 escritores, 2 lectores, en background
-```
-
-**Comportamiento esperado:** Los escritores y lectores se coordinan correctamente, mostrando letras balanceadas entre todos los escritores.
-
 ### 5. Drivers
 
 #### Driver de Teclado
@@ -377,36 +356,30 @@ Todos los comandos se ejecutan como **procesos de usuario** (no built-ins), lo q
     echo "hola mundo" | filter    # Salida: "hl mnd"
     ```
 
-11. **`mvar <writers> <readers>`**: Comando MVar para IPC coordinado.
-    ```bash
-    mvar 2 2      # 2 escritores, 2 lectores
-    mvar 2 2 &    # En background
-    ```
-
-12. **`test_mm [bytes]`**: Test del gestor de memoria.
+11. **`test_mm [bytes]`**: Test del gestor de memoria.
     ```bash
     test_mm              # Default: 100000000 bytes
     test_mm 50000000     # 50MB
     ```
 
-13. **`test_processes [n]`**: Test de gestión de procesos.
+12. **`test_processes [n]`**: Test de gestión de procesos.
     ```bash
     test_processes       # Default: 10 procesos
     test_processes 20    # 20 procesos
     ```
 
-14. **`test_priority [n]`**: Demostración de scheduling.
+13. **`test_priority [n]`**: Demostración de scheduling.
     ```bash
     test_priority        # Default: 5 procesos
     test_priority 10     # 10 procesos
     ```
 
-15. **`test_no_synchro [n]`**: Test sin sincronización (race condition).
+14. **`test_no_synchro [n]`**: Test sin sincronización (race condition).
     ```bash
     test_no_synchro 5
     ```
 
-16. **`test_synchro [n] [use_sem]`**: Test sincronizado con semáforos.
+15. **`test_synchro [n] [use_sem]`**: Test sincronizado con semáforos.
     ```bash
     test_synchro 5           # Con semáforos (default)
     test_synchro 5 1         # Con semáforos (explícito)
@@ -434,7 +407,6 @@ Ejecuta un comando en background (no bloquea la shell):
 ```bash
 loop -p 3 &              # Loop en background
 test_mm 50000000 &       # Test de memoria en background
-mvar 2 2 &               # MVar en background
 ```
 
 Cuando un comando termina en background, la shell continúa aceptando nuevos comandos inmediatamente.
@@ -526,20 +498,7 @@ echo "abracadabra" | filter
 # echo "test" | cat | wc
 ```
 
-### Ejemplo 5: MVar con Múltiples Escritores y Lectores
-
-```bash
-# 2 escritores, 2 lectores en background
-mvar 2 2 &
-
-# Ver procesos MVar
-ps
-
-# Los escritores escriben 'A' y 'B' alternadamente
-# Los lectores consumen y muestran en color
-```
-
-### Ejemplo 6: Workflow Completo
+### Ejemplo 5: Workflow Completo
 
 ```bash
 # 1. Ver procesos

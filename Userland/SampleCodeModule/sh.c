@@ -5,8 +5,9 @@
 #include <stdbool.h>
 #include <sys_calls.h>
 #include <colors.h>
-#include <kitty.h>
+#include <sh.h>
 #include <ascii.h>
+#include <mvar.h>
 #include "../tests/test_util.h"
 #include "../tests/syscall.h"
 
@@ -52,9 +53,9 @@ static void debug_dump_args(const char *tag, int argc, char **argv);
 
 static int debug_enabled = 0;
 static int is_background = 0; // Flag para indicar si el comando se ejecuta en background
-#define DBG_MSG(msg) debug_log("kitty", msg)
-#define DBG_VAL(label, value) debug_log_u64("kitty", label, value)
-#define DBG_ARGS(argc, argv) debug_dump_args("kitty", argc, argv)
+#define DBG_MSG(msg) debug_log("sh", msg)
+#define DBG_VAL(label, value) debug_log_u64("sh", label, value)
+#define DBG_ARGS(argc, argv) debug_dump_args("sh", argc, argv)
 
 static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int index, const char *fallback) {
 	if (dst == NULL || dst_len == 0) {
@@ -277,7 +278,6 @@ void cmd_test_synchro(void);
 void cmd_debug(void);
 void cmd_ps(void);
 void cmd_loop(void);
-void cmd_mvar(void);
 void cmd_nice(void);
 void cmd_kill(void);
 void cmd_block(void);
@@ -288,6 +288,7 @@ void cmd_wc(void);
 void cmd_filter(void);
 void cmd_mem(void);
 void cmd_echo(void);
+void cmd_mvar(void);
 void printPrompt(void);
 
 extern int mem_command(int argc, char **argv);
@@ -305,7 +306,6 @@ void printHelp()
 	printsColor("\n>invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>mvar <w> <r>       - launch MVar demo with writers/readers", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>block <pid>        - toggle process between BLOCKED and READY", MAX_BUFF, LIGHT_BLUE);
@@ -317,10 +317,11 @@ void printHelp()
 	printsColor("\n>wc                 - count lines from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
-    printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
+	printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
     printsColor("\n>test_priority [n]  - scheduling demo (default: 5)", MAX_BUFF, YELLOW);
 	printsColor("\n>test_no_synchro [n]- run race condition without semaphores", MAX_BUFF, YELLOW);
 	printsColor("\n>test_synchro [n]   - run synchronized version using semaphores", MAX_BUFF, YELLOW);
+	printsColor("\n>mvar <writers> <readers> - start colored MVar demo", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
 	printsColor("\n\n", MAX_BUFF, WHITE);
 	printsColor("Background execution:\n", MAX_BUFF, GREEN);
@@ -332,7 +333,7 @@ void printHelp()
 	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "mvar", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "mvar"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -353,7 +354,6 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_debug,
 	cmd_ps,
 	cmd_loop,
-	cmd_mvar,
 	cmd_nice,
 	cmd_kill,
 	cmd_block,
@@ -363,11 +363,12 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_cat,
 	cmd_wc,
 	cmd_filter,
-	cmd_echo
+	cmd_echo,
+	cmd_mvar
 };
 
 // Bucle principal de la shell: lee caracteres y procesa líneas completas
-void kitty()
+void sh_loop()
 {
 	char c;
 	printPrompt();
@@ -797,9 +798,7 @@ void cmd_help()
 
 void cmd_undefined()
 {
-	prints("\n\nbash: command not found: \"", MAX_BUFF);
-	prints(command, MAX_BUFF);
-	prints("\" Use 'help' or 'ls' to display available commands", MAX_BUFF);
+	prints("\n\nUnknown command. Type 'help' or 'ls' to display available commands", MAX_BUFF);
 }
 
 void cmd_time()
@@ -1700,6 +1699,90 @@ void cmd_filter()
 void cmd_echo()
 {
 	echo_output(parameter, 1);
+}
+
+void cmd_mvar()
+{
+	int idx = 0;
+	char token[MAX_BUFF];
+	int writers = 0;
+	int readers = 0;
+
+	if (!next_token(parameter, &idx, token, sizeof(token)))
+	{
+		printsColor("\nUsage: mvar <writers> <readers>\n", MAX_BUFF, RED);
+		return;
+	}
+	if (!parse_int_token(token, &writers) || writers <= 0)
+	{
+		printsColor("\n[mvar] Invalid writer count\n", MAX_BUFF, RED);
+		return;
+	}
+	if (!next_token(parameter, &idx, token, sizeof(token)))
+	{
+		printsColor("\nUsage: mvar <writers> <readers>\n", MAX_BUFF, RED);
+		return;
+	}
+	if (!parse_int_token(token, &readers) || readers <= 0)
+	{
+		printsColor("\n[mvar] Invalid reader count\n", MAX_BUFF, RED);
+		return;
+	}
+
+	if (writers > MVAR_MAX_WRITERS)
+	{
+		printsColor("\n[mvar] Too many writers requested\n", MAX_BUFF, RED);
+		return;
+	}
+	if (readers > MVAR_MAX_READERS)
+	{
+		printsColor("\n[mvar] Too many readers requested\n", MAX_BUFF, RED);
+		return;
+	}
+
+	mvar_launch_info_t info;
+	if (mvar_start(writers, readers, &info) < 0)
+	{
+		printsColor("\n[mvar] Failed to start demo (resources unavailable)\n", MAX_BUFF, RED);
+		return;
+	}
+
+	printsColor("\n[mvar] Started MVar demo ", MAX_BUFF, LIGHT_BLUE);
+	printf("(context %d) with %d writer%s and %d reader%s\n",
+		   info.context_id,
+		   writers,
+		   writers == 1 ? "" : "s",
+		   readers,
+		   readers == 1 ? "" : "s");
+
+	printsColor("[mvar] Writers:\n", MAX_BUFF, GREEN);
+	for (int i = 0; i < writers; i++)
+	{
+		if (info.writer_names[i][0] != '\0')
+		{
+			printf("  - %s (pid %d) value '%c'\n",
+				   info.writer_names[i],
+				   info.writer_pids[i],
+				   (char)('A' + (i % 26)));
+		}
+	}
+
+	printsColor("[mvar] Readers:\n", MAX_BUFF, GREEN);
+	for (int i = 0; i < readers; i++)
+	{
+		if (info.reader_names[i][0] != '\0')
+		{
+			printf("  - %s (pid %d)\n", info.reader_names[i], info.reader_pids[i]);
+		}
+	}
+
+	printsColor("[mvar] Output alternates between colored readers consuming writer values.\n", MAX_BUFF, LIGHT_BLUE);
+	printsColor("[mvar] Use 'kill' or 'nice' with the PIDs above to replicate the scenarios.\n", MAX_BUFF, LIGHT_BLUE);
+
+	if (is_background)
+	{
+		printPrompt();
+	}
 }
 
 void historyCaller(int direction)
