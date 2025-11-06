@@ -194,11 +194,9 @@ void tty_push_char(tty_t *t, char c) {
         irq_restore_local(flags);
         
         // Obtener el proceso en foreground y matarlo
-        int fg_pid = proc_get_foreground_pid();
-        
         const char *sigint_msg = "^C\n";
         tty_write(t, sigint_msg, 3);
-        
+        int fg_pid = proc_get_foreground_pid();
         if (fg_pid > 0) {
             proc_kill(fg_pid);
         }

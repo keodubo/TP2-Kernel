@@ -50,6 +50,7 @@ typedef struct pcb_t {
     int pid;
     char name[32];
     int priority;
+    int base_priority;
     proc_state_t state;
     regs_t *kframe;
     uint8_t *kstack_base;
@@ -78,6 +79,7 @@ typedef struct pcb_t {
     bool exited;
     bool zombie_reapable;
     struct fd_table *fd_table;
+    int aging_ticks;
 } pcb_t;
 
 typedef struct proc_info_t {

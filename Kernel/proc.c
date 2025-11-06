@@ -76,6 +76,8 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     }
 
     proc->priority = prio;
+    proc->base_priority = prio;
+    proc->aging_ticks = 0;
     proc->state = NEW;
     proc->fg = fg;
     proc->ticks_left = TIME_SLICE_TICKS;  // Quantum inicial
@@ -255,6 +257,8 @@ int proc_unblock(int pid) {
 
     if (proc->state == BLOCKED) {
         proc->state = READY;
+        proc->ticks_left = TIME_SLICE_TICKS;
+        proc->aging_ticks = 0;
         sched_enqueue(proc);
         return 0;
     }
@@ -280,6 +284,8 @@ void proc_nice(int pid, int new_prio) {
         return;
     }
 
+    proc->base_priority = new_prio;
+    proc->aging_ticks = 0;
     bool was_running = (proc->state == RUNNING && proc == sched_current());
     bool was_ready = (proc->state == READY);
 

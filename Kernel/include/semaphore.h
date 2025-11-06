@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "sched.h"
+#include "spinlock.h"
 
 // Parámetros globales del sistema de semáforos nombrados
 
@@ -17,14 +18,20 @@ typedef struct sem_waiter {
     struct sem_waiter *next;
 } sem_waiter_t;
 
+typedef struct wait_queue {
+    sem_waiter_t *head;
+    sem_waiter_t *tail;
+} wait_queue_t;
+
 // Semáforo kernel-space compartido entre procesos
 typedef struct ksem {
+    spinlock_t lock;
     char name[KSEM_NAME_MAX];
     unsigned int count;
     unsigned int refcount;
     bool unlinked;
-    sem_waiter_t *wait_head;
-    sem_waiter_t *wait_tail;
+    bool destroying;
+    wait_queue_t waiters;
     struct ksem *hash_next;
 } ksem_t;
 

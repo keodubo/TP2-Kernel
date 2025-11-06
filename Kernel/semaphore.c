@@ -3,28 +3,34 @@
 #include "include/interrupts.h"
 #include "include/lib.h"
 
-// Semáforos nombrados en kernel space, con hash table y colas de espera
-// Permite sincronizacion entre procesos no relacionados que acuerdan un nombre
-// SIN SPINLOCKS: Los procesos se bloquean realmente (no hay busy-wait)
-// Wakeup FIFO, atomicidad garantizada con CLI/STI
+// Semáforos nominales en kernel space con spinlocks y colas FIFO
+// Implementa creación, espera bloqueante y señalización sin busy-wait
 
 #define SEM_HANDLE_MAX 128
 
 static ksem_t *sem_buckets[KSEM_HASH_BUCKETS] = {0};
-static volatile int sem_creation_lock = 0;  // Simple spinlock for semaphore creation
+static volatile int sem_creation_lock = 0;  // Spinlock global para creación
 
-static uint32_t sem_hash(const char *name);      // Hash simple (djb2)
+// Helpers de tabla hash y nombres
+static uint32_t sem_hash(const char *name);
 static uint32_t sem_name_len(const char *name);
 static int sem_name_cmp(const char *a, const char *b);
 static void sem_name_copy(char *dst, const char *src);
+
+// Helpers de interrupciones locales
 static uint64_t irq_save(void);
 static void irq_restore(uint64_t flags);
-static void sem_free(ksem_t *sem);
 
-// Archivo: semaphore.c
-// Propósito: Implementación de semáforos en espacio kernel
-// Resumen: Tablas hash de semáforos nombrados, creación, apertura, espera
-//          y señalización con manejo de colas de procesos bloqueados.
+// Helpers de cola FIFO de waiters
+static void wait_queue_init(wait_queue_t *q);
+static bool wait_queue_is_empty(const wait_queue_t *q);
+static void wait_queue_push(wait_queue_t *q, sem_waiter_t *node);
+static sem_waiter_t *wait_queue_pop(wait_queue_t *q);
+static sem_waiter_t *wait_queue_remove_proc(wait_queue_t *q, pcb_t *proc);
+
+// Helpers varios
+static bool sem_ready_to_destroy_locked(ksem_t *sem);
+static void sem_free(ksem_t *sem);
 
 static uint32_t sem_hash(const char *name) {
     uint32_t hash = 5381;
@@ -78,20 +84,115 @@ static void irq_restore(uint64_t flags) {
     }
 }
 
+static void wait_queue_init(wait_queue_t *q) {
+    if (q != NULL) {
+        q->head = NULL;
+        q->tail = NULL;
+    }
+}
+
+static bool wait_queue_is_empty(const wait_queue_t *q) {
+    return q == NULL || q->head == NULL;
+}
+
+static void wait_queue_push(wait_queue_t *q, sem_waiter_t *node) {
+    if (q == NULL || node == NULL) {
+        return;
+    }
+    node->next = NULL;
+    if (q->tail == NULL) {
+        q->head = node;
+        q->tail = node;
+    } else {
+        q->tail->next = node;
+        q->tail = node;
+    }
+}
+
+static sem_waiter_t *wait_queue_pop(wait_queue_t *q) {
+    if (q == NULL || q->head == NULL) {
+        return NULL;
+    }
+    sem_waiter_t *node = q->head;
+    q->head = node->next;
+    if (q->head == NULL) {
+        q->tail = NULL;
+    }
+    node->next = NULL;
+    return node;
+}
+
+static sem_waiter_t *wait_queue_remove_proc(wait_queue_t *q, pcb_t *proc) {
+    if (q == NULL || proc == NULL) {
+        return NULL;
+    }
+
+    sem_waiter_t *removed_head = NULL;
+    sem_waiter_t *removed_tail = NULL;
+
+    sem_waiter_t *prev = NULL;
+    sem_waiter_t *cursor = q->head;
+
+    while (cursor != NULL) {
+        sem_waiter_t *next = cursor->next;
+        if (cursor->proc == proc) {
+            if (prev == NULL) {
+                q->head = next;
+            } else {
+                prev->next = next;
+            }
+
+            if (q->tail == cursor) {
+                q->tail = prev;
+            }
+
+            cursor->next = NULL;
+            if (removed_tail == NULL) {
+                removed_head = cursor;
+                removed_tail = cursor;
+            } else {
+                removed_tail->next = cursor;
+                removed_tail = cursor;
+            }
+            cursor = next;
+            continue;
+        }
+        prev = cursor;
+        cursor = next;
+    }
+
+    return removed_head;
+}
+
+static bool sem_ready_to_destroy_locked(ksem_t *sem) {
+    if (sem == NULL) {
+        return false;
+    }
+    if (sem->destroying) {
+        return false;
+    }
+    if (sem->unlinked && sem->refcount == 0 && wait_queue_is_empty(&sem->waiters)) {
+        sem->destroying = true;
+        return true;
+    }
+    return false;
+}
+
 static void sem_free(ksem_t *sem) {
     if (sem == NULL) {
         return;
     }
-    sem_waiter_t *waiter = sem->wait_head;
-    while (waiter != NULL) {
-        sem_waiter_t *next = waiter->next;
+    sem_waiter_t *waiter;
+    while ((waiter = wait_queue_pop(&sem->waiters)) != NULL) {
         mm_free(waiter);
-        waiter = next;
     }
     mm_free(sem);
 }
 
-// Obtiene (o crea) un semáforo nominal y ajusta su refcount
+// -----------------------------------------------------------------------------
+// API pública
+// -----------------------------------------------------------------------------
+
 int ksem_open(const char *name, unsigned int init, ksem_t **out) {
     if (name == NULL || out == NULL) {
         return -1;
@@ -102,10 +203,7 @@ int ksem_open(const char *name, unsigned int init, ksem_t **out) {
         return -1;
     }
 
-    // Acquire global creation lock to prevent races during semaphore creation
-    // This ensures only one process can check-allocate-insert at a time
     while (__sync_lock_test_and_set(&sem_creation_lock, 1)) {
-        // Spin until we get the lock
         __asm__ volatile("pause");
     }
 
@@ -116,7 +214,9 @@ int ksem_open(const char *name, unsigned int init, ksem_t **out) {
     ksem_t *cursor = sem_buckets[bucket];
     while (cursor != NULL) {
         if (!cursor->unlinked && sem_name_cmp(cursor->name, name) == 0) {
+            spinlock_lock(&cursor->lock);
             cursor->refcount++;
+            spinlock_unlock(&cursor->lock);
             sem = cursor;
             break;
         }
@@ -126,36 +226,37 @@ int ksem_open(const char *name, unsigned int init, ksem_t **out) {
     irq_restore(flags);
 
     if (sem != NULL) {
-        __sync_lock_release(&sem_creation_lock);  // Release lock before returning
+        __sync_lock_release(&sem_creation_lock);
         *out = sem;
         return 0;
     }
 
-    // Semaphore doesn't exist, allocate one (still holding creation lock)
     ksem_t *new_sem = (ksem_t *)mm_malloc(sizeof(ksem_t));
     if (new_sem == NULL) {
-        __sync_lock_release(&sem_creation_lock);  // Release lock before returning
+        __sync_lock_release(&sem_creation_lock);
         return -1;
     }
+
     memset(new_sem, 0, sizeof(ksem_t));
+    spinlock_init(&new_sem->lock);
+    wait_queue_init(&new_sem->waiters);
     sem_name_copy(new_sem->name, name);
     new_sem->count = init;
     new_sem->refcount = 1;
     new_sem->unlinked = false;
-    new_sem->wait_head = NULL;
-    new_sem->wait_tail = NULL;
+    new_sem->destroying = false;
     new_sem->hash_next = NULL;
 
-    // Double-check: another process might have created it while we were allocating
-    // This is now safe because we hold the creation lock
     flags = irq_save();
 
     cursor = sem_buckets[bucket];
     while (cursor != NULL) {
         if (!cursor->unlinked && sem_name_cmp(cursor->name, name) == 0) {
+            spinlock_lock(&cursor->lock);
             cursor->refcount++;
+            spinlock_unlock(&cursor->lock);
             irq_restore(flags);
-            __sync_lock_release(&sem_creation_lock);  // Release lock before returning
+            __sync_lock_release(&sem_creation_lock);
             sem_free(new_sem);
             *out = cursor;
             return 0;
@@ -163,18 +264,16 @@ int ksem_open(const char *name, unsigned int init, ksem_t **out) {
         cursor = cursor->hash_next;
     }
 
-    // Insert our new semaphore
     new_sem->hash_next = sem_buckets[bucket];
     sem_buckets[bucket] = new_sem;
-    irq_restore(flags);
 
-    __sync_lock_release(&sem_creation_lock);  // Release lock after insertion
+    irq_restore(flags);
+    __sync_lock_release(&sem_creation_lock);
+
     *out = new_sem;
     return 0;
 }
 
-// Decrementa el semáforo o bloquea al proceso si el contador está en cero
-// SIN SPINLOCKS: bloquea el proceso realmente (sin busy-wait)
 int ksem_wait(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -185,11 +284,8 @@ int ksem_wait(ksem_t *sem) {
         return -1;
     }
 
-    // Pre-allocate waiter node BEFORE entering critical section
-    // This prevents calling mm_malloc with interrupts disabled, which can cause deadlock
     sem_waiter_t *waiter = (sem_waiter_t *)mm_malloc(sizeof(sem_waiter_t));
     if (waiter == NULL) {
-        // DEBUG: mm_malloc failed
         extern void ncPrintDec(uint64_t value);
         extern void ncPrint(const char *string);
         ncPrint("[KERNEL] sem_wait: mm_malloc FAILED for PID ");
@@ -198,122 +294,107 @@ int ksem_wait(ksem_t *sem) {
         return -1;
     }
 
-    // Sección crítica: deshabilitar interrupciones para atomicidad
-    uint64_t flags = irq_save();
+    uint64_t flags = spinlock_lock_irqsave(&sem->lock);
 
-    // Fast path: Si count > 0, simplemente decrementar y retornar
     if (sem->count > 0) {
         sem->count--;
-        irq_restore(flags);
-        // Free the pre-allocated waiter since we didn't need it
+        spinlock_unlock_irqrestore(&sem->lock, flags);
         mm_free(waiter);
         return 0;
     }
 
-    // Slow path: count == 0, necesitamos bloquear el proceso
-    // 1. Use the pre-allocated waiter node
     waiter->proc = current;
-    waiter->next = NULL;
+    wait_queue_push(&sem->waiters, waiter);
 
-    // 2. Encolar al final de la cola (FIFO)
-    if (sem->wait_tail == NULL) {
-        sem->wait_head = waiter;
-        sem->wait_tail = waiter;
-    } else {
-        sem->wait_tail->next = waiter;
-        sem->wait_tail = waiter;
-    }
-
-    // 3. CRÍTICO: Marcar proceso como BLOCKED DENTRO de la sección crítica
-    // Esto previene "lost wakeup": si ksem_post() se ejecuta ahora,
-    // ya estamos marcados como BLOCKED, entonces proc_unblock() funcionará correctamente
     current->state = BLOCKED;
     current->ticks_left = 0;
 
-    // Fin de la sección crítica
-    irq_restore(flags);
+    spinlock_unlock_irqrestore(&sem->lock, flags);
 
-    // 4. Ceder el CPU inmediatamente (bloqueo cooperativo, NO busy-wait)
     sched_force_yield();
     return 0;
 }
 
-// Incrementa el semáforo y despierta a un proceso bloqueado, si lo hay
-// Usa wakeup FIFO: despierta siempre al proceso que esperó por más tiempo
 int ksem_post(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
     }
 
     sem_waiter_t *waiter = NULL;
-    
-    // Sección crítica: deshabilitar interrupciones
-    uint64_t flags = irq_save();
-    
-    if (sem->wait_head != NULL) {
-        // Hay procesos esperando: despertar al primero (FIFO)
-        waiter = sem->wait_head;
-        sem->wait_head = waiter->next;
-        if (sem->wait_head == NULL) {
-            sem->wait_tail = NULL;  // Cola vacía
+    pcb_t *target = NULL;
+
+    uint64_t flags = spinlock_lock_irqsave(&sem->lock);
+
+    if (!wait_queue_is_empty(&sem->waiters)) {
+        waiter = wait_queue_pop(&sem->waiters);
+        if (waiter != NULL) {
+            target = waiter->proc;
         }
     } else {
-        // No hay waiters: incrementar contador
         if (sem->count < UINT32_MAX) {
             sem->count++;
         }
     }
-    irq_restore(flags);
 
-    // Despertar el proceso FUERA de la sección crítica
+    spinlock_unlock_irqrestore(&sem->lock, flags);
+
     if (waiter != NULL) {
-        int unblock_result = proc_unblock(waiter->proc->pid);
-        if (unblock_result < 0) {
-            // DEBUG: proc_unblock failed
-            extern void ncPrintDec(uint64_t value);
-            extern void ncPrint(const char *string);
-            ncPrint("[KERNEL] sem_post: proc_unblock FAILED for PID ");
-            ncPrintDec(waiter->proc->pid);
-            ncPrint("\n");
+        bool wake_success = false;
+        if (target != NULL) {
+            wake_success = (proc_unblock(target->pid) == 0);
         }
+
+        if (!wake_success) {
+            uint64_t fix_flags = spinlock_lock_irqsave(&sem->lock);
+            if (sem->count < UINT32_MAX) {
+                sem->count++;
+            }
+            spinlock_unlock_irqrestore(&sem->lock, fix_flags);
+        }
+
         mm_free(waiter);
     }
 
     return 0;
 }
 
-// Libera la referencia local; el semáforo se elimina al llegar a cero
 int ksem_close(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
     }
 
-    uint64_t flags = irq_save();
+    bool should_free = false;
+    uint64_t flags = spinlock_lock_irqsave(&sem->lock);
+
     if (sem->refcount == 0) {
-        irq_restore(flags);
+        spinlock_unlock_irqrestore(&sem->lock, flags);
         return -1;
     }
+
     sem->refcount--;
-    bool should_free = (sem->unlinked && sem->refcount == 0 && sem->wait_head == NULL);
-    irq_restore(flags);
+    should_free = sem_ready_to_destroy_locked(sem);
+
+    spinlock_unlock_irqrestore(&sem->lock, flags);
 
     if (should_free) {
         sem_free(sem);
     }
+
     return 0;
 }
 
-// Elimina el nombre del semáforo para futuras aperturas
 int ksem_unlink(const char *name) {
     if (name == NULL) {
         return -1;
     }
+
     uint32_t len = sem_name_len(name);
     if (len == 0 || len >= KSEM_NAME_MAX) {
         return -1;
     }
 
     uint64_t flags = irq_save();
+
     uint32_t bucket = sem_hash(name);
     ksem_t *prev = NULL;
     ksem_t *cursor = sem_buckets[bucket];
@@ -336,14 +417,19 @@ int ksem_unlink(const char *name) {
         prev->hash_next = cursor->hash_next;
     }
     cursor->hash_next = NULL;
-    cursor->unlinked = true;
-    bool should_free = (cursor->refcount == 0 && cursor->wait_head == NULL);
 
     irq_restore(flags);
+
+    bool should_free = false;
+    uint64_t lock_flags = spinlock_lock_irqsave(&cursor->lock);
+    cursor->unlinked = true;
+    should_free = sem_ready_to_destroy_locked(cursor);
+    spinlock_unlock_irqrestore(&cursor->lock, lock_flags);
 
     if (should_free) {
         sem_free(cursor);
     }
+
     return 0;
 }
 
@@ -352,45 +438,42 @@ void ksem_remove_waiters_for(pcb_t *proc) {
         return;
     }
 
-    sem_waiter_t *garbage = NULL;
+    sem_waiter_t *garbage_head = NULL;
+    sem_waiter_t *garbage_tail = NULL;
+
     uint64_t flags = irq_save();
 
     for (int bucket = 0; bucket < KSEM_HASH_BUCKETS; bucket++) {
         ksem_t *sem = sem_buckets[bucket];
         while (sem != NULL) {
-            sem_waiter_t *prev = NULL;
-            sem_waiter_t *node = sem->wait_head;
-            while (node != NULL) {
-                if (node->proc == proc) {
-                    sem_waiter_t *next = node->next;
+            ksem_t *next_sem = sem->hash_next;
 
-                    if (prev == NULL) {
-                        sem->wait_head = next;
-                    } else {
-                        prev->next = next;
-                    }
+            uint64_t lock_flags = spinlock_lock_irqsave(&sem->lock);
+            sem_waiter_t *removed = wait_queue_remove_proc(&sem->waiters, proc);
+            spinlock_unlock_irqrestore(&sem->lock, lock_flags);
 
-                    if (sem->wait_tail == node) {
-                        sem->wait_tail = prev;
-                    }
-
-                    node->next = garbage;
-                    garbage = node;
-                    node = next;
-                    continue;
+            while (removed != NULL) {
+                sem_waiter_t *next = removed->next;
+                removed->next = NULL;
+                if (garbage_tail == NULL) {
+                    garbage_head = removed;
+                    garbage_tail = removed;
+                } else {
+                    garbage_tail->next = removed;
+                    garbage_tail = removed;
                 }
-                prev = node;
-                node = node->next;
+                removed = next;
             }
-            sem = sem->hash_next;
+
+            sem = next_sem;
         }
     }
 
     irq_restore(flags);
 
-    while (garbage != NULL) {
-        sem_waiter_t *next = garbage->next;
-        mm_free(garbage);
-        garbage = next;
+    while (garbage_head != NULL) {
+        sem_waiter_t *next = garbage_head->next;
+        mm_free(garbage_head);
+        garbage_head = next;
     }
 }

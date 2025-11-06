@@ -10,13 +10,11 @@ static pcb_t *ready_head[MAX_PRIOS];
 static pcb_t *ready_tail[MAX_PRIOS];
 static bool scheduler_enabled = false;
 
-#define FG_SKIP_THRESHOLD 5
+#define AGING_THRESHOLD 10
 
 pcb_t *current = NULL;
 
 static pcb_t *idle_proc = NULL;
-static int fg_skip_counter = 0;
-
 extern void _force_schedule(void);
 extern void _hlt(void);
 
@@ -24,6 +22,7 @@ static void q_push(pcb_t *proc);
 static pcb_t *q_pop(int prio);
 static void q_remove(pcb_t *proc);
 static pcb_t *pick_next(void);
+static void apply_aging(void);
 static void idle_loop(int argc, char **argv);
 
 void sched_init(void) {
@@ -35,7 +34,6 @@ void sched_init(void) {
     scheduler_enabled = false;
     current = NULL;
     idle_proc = NULL;
-    fg_skip_counter = 0;
 
     int idle_pid = proc_create(idle_loop, 0, NULL, MIN_PRIO, false, "idle");
     if (idle_pid >= 0) {
@@ -86,8 +84,11 @@ void sched_enqueue(pcb_t *proc) {
         proc->priority = HIGHEST_PRIO;
     }
 
+    // Ensure queue_next is clear before enqueueing
+    proc->queue_next = NULL;
     proc->state = READY;
     proc->ticks_left = TIME_SLICE_TICKS;
+    proc->aging_ticks = 0;
     q_push(proc);
 }
 
@@ -137,12 +138,16 @@ uint64_t schedule(uint64_t cur_rsp) {
     if (prev->state == RUNNING && prev != idle_proc) {
         prev->state = READY;
         prev->ticks_left = TIME_SLICE_TICKS;
+        prev->priority = prev->base_priority;
+        prev->aging_ticks = 0;
         q_push(prev);
     }
 
     if (prev->state == BLOCKED || prev->state == EXITED) {
         prev->ticks_left = 0;
     }
+
+    apply_aging();
 
     pcb_t *next = pick_next();
     if (next == NULL) {
@@ -154,15 +159,22 @@ uint64_t schedule(uint64_t cur_rsp) {
         return 0;
     }
 
-    // Debug: imprimir cuando cambiamos de proceso
-    if (next != prev && next->pid >= 4 && next->pid <= 6) {
-        ncPrint("[SCHED] Switching to child process\n");
+    // Validate next process has valid kframe
+    if (next->kframe == NULL) {
+        // Fallback to idle or prev if next is corrupted
+        if (idle_proc != NULL && idle_proc != next && idle_proc->kframe != NULL) {
+            next = idle_proc;
+        } else {
+            current = prev;
+            return 0;
+        }
     }
 
     next->state = RUNNING;
     next->ticks_left = TIME_SLICE_TICKS;
-    if (next->fg) {
-        fg_skip_counter = 0;
+    if (next != idle_proc) {
+        next->priority = next->base_priority;
+        next->aging_ticks = 0;
     }
     current = next;
 
@@ -231,62 +243,74 @@ static void q_remove(pcb_t *proc) {
 }
 
 static pcb_t *pick_next(void) {
-    pcb_t *fg_candidate = NULL;
-    int fg_candidate_prio = MIN_PRIO;
-    int highest_ready_prio = -1;
-
-    for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
-        if (ready_head[prio] != NULL && highest_ready_prio < prio) {
-            highest_ready_prio = prio;
-        }
-
-        if (fg_candidate == NULL) {
-            pcb_t *cursor = ready_head[prio];
-            while (cursor != NULL) {
-                if (cursor->fg) {
-                    fg_candidate = cursor;
-                    fg_candidate_prio = prio;
-                    break;
-                }
-                cursor = cursor->queue_next;
-            }
-        }
-    }
-
-    bool fg_available = (fg_candidate != NULL);
-
-    if (!fg_available) {
-        fg_skip_counter = 0;
-    }
-
-    if (fg_available && highest_ready_prio > fg_candidate_prio) {
-        if (fg_skip_counter >= FG_SKIP_THRESHOLD) {
-            fg_skip_counter = 0;
-            q_remove(fg_candidate);
-            return fg_candidate;
-        }
-    } else if (fg_available && highest_ready_prio == fg_candidate_prio) {
-        fg_skip_counter = 0;
-    }
-
-    // Selección estricta por prioridad para el resto
     for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
         if (ready_head[prio] != NULL) {
             pcb_t *next = q_pop(prio);
             if (next != NULL) {
-                if (next->fg) {
-                    fg_skip_counter = 0;
-                } else if (fg_available && highest_ready_prio > fg_candidate_prio) {
-                    fg_skip_counter++;
-                } else if (!fg_available) {
-                    fg_skip_counter = 0;
-                }
                 return next;
             }
         }
     }
 
     return NULL;
+}
+
+static void apply_aging(void) {
+    // Collect promoted processes to avoid modifying queues during iteration
+    pcb_t *promoted_head = NULL;
+    pcb_t *promoted_tail = NULL;
+    
+    for (int prio = MIN_PRIO; prio <= HIGHEST_PRIO; prio++) {
+        pcb_t *prev = NULL;
+        pcb_t *node = ready_head[prio];
+        while (node != NULL) {
+            pcb_t *next = node->queue_next;
+            
+            node->aging_ticks++;
+            if (node->aging_ticks > AGING_THRESHOLD) {
+                node->aging_ticks = AGING_THRESHOLD;
+            }
+            bool promote = (node->priority < HIGHEST_PRIO) &&
+                           (node->aging_ticks >= AGING_THRESHOLD);
+            
+            if (promote) {
+                // Remove node from current priority queue
+                if (prev == NULL) {
+                    ready_head[prio] = next;
+                } else {
+                    prev->queue_next = next;
+                }
+                if (ready_tail[prio] == node) {
+                    ready_tail[prio] = prev;
+                }
+                
+                // Add to promoted list
+                node->queue_next = NULL;
+                if (promoted_tail == NULL) {
+                    promoted_head = node;
+                    promoted_tail = node;
+                } else {
+                    promoted_tail->queue_next = node;
+                    promoted_tail = node;
+                }
+                
+                node->priority++;
+                node->aging_ticks = 0;
+            } else {
+                prev = node;
+            }
+            node = next;
+        }
+    }
+    
+    // Now re-insert all promoted processes
+    pcb_t *promoted = promoted_head;
+    while (promoted != NULL) {
+        pcb_t *next = promoted->queue_next;
+        promoted->queue_next = NULL;
+        q_push(promoted);
+        promoted = next;
+    }
 }
 
 static void idle_loop(int argc, char **argv) {
