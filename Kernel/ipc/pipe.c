@@ -187,8 +187,8 @@ int kpipe_open(const char* name, bool for_read, bool for_write, kpipe_t **out) {
     
     // Insertar en hash table
     flags = irq_save();
-    
-    // Double-check por race condition
+
+    // Verificación doble ante condición de carrera
     cursor = pipe_buckets[bucket];
     while (cursor != NULL) {
         if (!cursor->unlinked && pipe_name_cmp(cursor->name, name) == 0) {
@@ -276,8 +276,8 @@ int kpipe_read(kpipe_t *p, void *buf, int n) {
     
     while (total_read < n) {
         uint64_t flags = irq_save();
-        
-        // Fast path: hay datos disponibles
+
+        // Camino rápido: hay datos disponibles
         if (p->size > 0) {
             int remaining = n - total_read;
             int to_read = ((int)p->size < remaining) ? (int)p->size : remaining;
@@ -324,28 +324,28 @@ int kpipe_read(kpipe_t *p, void *buf, int n) {
             return -1;
         }
         
-        // Pre-allocate waiter BEFORE it's needed (still in critical section but before enqueue)
-        // We need to temporarily exit critical section to allocate
+        // Pre-asignar waiter ANTES de necesitarlo (aún en sección crítica pero antes de encolar)
+        // Necesitamos salir temporalmente de la sección crítica para asignar memoria
         irq_restore(flags);
 
         pipe_waiter_t *waiter = (pipe_waiter_t *)mm_malloc(sizeof(pipe_waiter_t));
         if (waiter == NULL) {
-            return -1;  // Memory allocation failed
+            return -1;  // Falló la asignación de memoria
         }
 
-        // Re-enter critical section
+        // Re-ingresar a la sección crítica
         flags = irq_save();
 
-        // Double-check conditions after re-entering (they might have changed)
+        // Verificación doble de condiciones al re-ingresar (pudieron haber cambiado)
         if (p->size > 0) {
-            // Data became available while we were allocating
+            // Los datos se volvieron disponibles mientras asignábamos memoria
             irq_restore(flags);
             mm_free(waiter);
-            continue;  // Retry read
+            continue;  // Reintentar lectura
         }
 
         if (p->writers == 0) {
-            // Writers closed while we were allocating
+            // Los escritores se cerraron mientras asignábamos memoria
             irq_restore(flags);
             mm_free(waiter);
             return total_read;
@@ -353,7 +353,7 @@ int kpipe_read(kpipe_t *p, void *buf, int n) {
 
         enqueue_reader(p, current, waiter);
 
-        // *** FIX: Marcar como BLOQUEADO dentro de la sección crítica
+        // *** ARREGLO: Marcar como BLOQUEADO dentro de la sección crítica
         // (previene lost wakeup, igual que en semáforos)
         current->state = BLOCKED;
         current->ticks_left = 0;
@@ -386,8 +386,8 @@ int kpipe_write(kpipe_t *p, const void *buf, int n) {
             irq_restore(flags);
             return -1; // EPIPE: no hay lectores
         }
-        
-        // Fast path: hay espacio disponible
+
+        // Camino rápido: hay espacio disponible
         if (p->size < PIPE_CAP) {
             int space = (int)(PIPE_CAP - p->size);
             int remaining = n - total_written;
@@ -428,29 +428,29 @@ int kpipe_write(kpipe_t *p, const void *buf, int n) {
             return -1;
         }
         
-        // Pre-allocate waiter BEFORE it's needed
-        // Temporarily exit critical section to allocate
+        // Pre-asignar waiter ANTES de necesitarlo
+        // Salir temporalmente de la sección crítica para asignar memoria
         irq_restore(flags);
 
         pipe_waiter_t *waiter = (pipe_waiter_t *)mm_malloc(sizeof(pipe_waiter_t));
         if (waiter == NULL) {
-            return -1;  // Memory allocation failed
+            return -1;  // Falló la asignación de memoria
         }
 
-        // Re-enter critical section
+        // Re-ingresar a la sección crítica
         flags = irq_save();
 
-        // Double-check conditions after re-entering
+        // Verificación doble de condiciones al re-ingresar
         if (p->size < PIPE_CAP) {
-            // Space became available while we were allocating
+            // El espacio se volvió disponible mientras asignábamos memoria
             irq_restore(flags);
             mm_free(waiter);
-            continue;  // Retry write
+            continue;  // Reintentar escritura
         }
 
         enqueue_writer(p, current, waiter);
 
-        // *** FIX: Marcar como BLOQUEADO dentro de la sección crítica
+        // *** ARREGLO: Marcar como BLOQUEADO dentro de la sección crítica
         current->state = BLOCKED;
         current->ticks_left = 0;
         

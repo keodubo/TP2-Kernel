@@ -134,7 +134,7 @@ static int sem_handle_allocate(ksem_t *sem, int owner_pid) {
             return i + 1;
         }
     }
-    // DEBUG: Table is full - log it
+    // DEBUG: Tabla llena - registrar evento
     irq_restore_local(flags);
     extern void ncPrintDec(uint64_t value);
     extern void ncPrint(const char *string);
@@ -214,7 +214,7 @@ int sys_sem_open(const char *name, unsigned int init) {
 
     int handle = sem_handle_allocate(sem, cur->pid);
     if (handle < 0) {
-        // DEBUG: Handle table full
+        // DEBUG: Tabla de handles llena
         extern void ncPrintDec(uint64_t value);
         extern void ncNewline(void);
         extern void ncPrint(const char *string);

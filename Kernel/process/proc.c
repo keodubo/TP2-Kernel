@@ -7,24 +7,59 @@
 #include "syscalls.h"
 #include "naiveConsole.h"
 
-// Gestion de procesos (PCB)
-// Implementa tabla de procesos, creacion, destruccion, comunicacion
-// Incluye manejo de zombis, espera y notificaciones entre procesos
-// Utilidades para gestion del stack de usuario y trampolines
+/**
+ * Gestión de Procesos (PCB - Process Control Block)
+ *
+ * Este módulo implementa la tabla de procesos del kernel, proporcionando
+ * funcionalidades completas para el ciclo de vida de los procesos.
+ *
+ * Características principales:
+ * - Creación y destrucción de procesos con asignación dinámica de recursos
+ * - Manejo de relaciones padre-hijo y órfanos
+ * - Sistema de zombies para preservar códigos de salida
+ * - Mecanismo wait/waitpid para sincronización entre procesos
+ * - Gestión de stacks de kernel y configuración para context switch
+ *
+ * Ciclo de vida de un proceso:
+ * 1. NEW: Proceso creado pero aún no agregado al scheduler
+ * 2. READY: En cola del scheduler, listo para ejecutar
+ * 3. RUNNING: Actualmente en ejecución
+ * 4. BLOCKED: Bloqueado esperando un evento (semáforo, pipe, etc.)
+ * 5. ZOMBIE: Terminado pero con código de salida preservado para el padre
+ * 6. UNUSED: Slot liberado y disponible para reuso
+ */
 
+#define KSTACK_SIZE (16 * 1024)  // Tamaño del stack del kernel por proceso
 
-#define KSTACK_SIZE (16 * 1024)
-
+// Tabla estática de procesos (MAX_PROCS slots)
 static pcb_t procs[MAX_PROCS];
+
+// Lista enlazada de procesos activos (estados NEW, READY, RUNNING, BLOCKED)
 static pcb_t *proc_head = NULL;
 static pcb_t *proc_tail = NULL;
+
+// Lista enlazada de procesos zombie (esperando ser recolectados por el padre)
 static pcb_t *zombie_head = NULL;
+
+// Contador global para asignar PIDs únicos
 static int next_pid = 1;
 
+/**
+ * Estructura para almacenar resultados de procesos hijos que terminaron.
+ *
+ * Cuando un hijo termina y el padre no está esperando activamente (no está
+ * bloqueado en wait), se crea un wait_result y se encola en el padre. Esto
+ * permite que waitpid retorne inmediatamente si el hijo ya terminó.
+ *
+ * Caso de uso:
+ * - Proceso hijo termina antes de que el padre llame a waitpid
+ * - Se guarda el PID y código de salida en wait_result
+ * - Cuando el padre llama waitpid, encuentra el resultado inmediatamente
+ */
 typedef struct wait_result {
-    int child_pid;
-    int exit_code;
-    struct wait_result *next;
+    int child_pid;    // PID del hijo que terminó
+    int exit_code;    // Código de salida del hijo
+    struct wait_result *next;  // Siguiente resultado en la cola
 } wait_result_t;
 
 static pcb_t *allocate_slot(void);
@@ -623,7 +658,30 @@ static void notify_parent_exit(pcb_t *proc) {
     }
 }
 
+/**
+ * Espera a que un proceso hijo termine su ejecución.
+ *
+ * Implementa la semántica de waitpid() de POSIX:
+ * - Si target_pid > 0: espera al hijo específico con ese PID
+ * - Si target_pid == -1 o 0: espera a cualquier hijo
+ *
+ * Mecanismo de funcionamiento:
+ * 1. Primero verifica si ya hay resultados pendientes (hijo terminó antes del wait)
+ * 2. Si no hay resultados, verifica que el hijo exista y esté activo
+ * 3. Marca al padre como BLOCKED y espera a que el hijo termine
+ * 4. Cuando el hijo termina, despierta al padre y retorna el código de salida
+ *
+ * Casos especiales:
+ * - Si el hijo ya terminó: retorna inmediatamente con el código guardado
+ * - Si no hay hijos: retorna -1
+ * - Si el hijo específico no existe: retorna -1
+ *
+ * @param target_pid PID del hijo a esperar, o -1 para cualquier hijo
+ * @param status Puntero donde guardar el código de salida (puede ser NULL)
+ * @return PID del hijo que terminó, o -1 si hubo error
+ */
 int proc_wait(int target_pid, int *status) {
+    // Limpiar zombies antes de comenzar
     collect_zombies();
 
     pcb_t *parent = sched_current();
@@ -631,17 +689,20 @@ int proc_wait(int target_pid, int *status) {
         return -1;
     }
 
+    // Normalizar: 0 significa "cualquier hijo" (equivalente a -1)
     if (target_pid == 0) {
         target_pid = -1;
     }
 
+    // Caso 1: Verificar si ya hay un resultado pendiente
+    // (hijo terminó antes de que el padre llamara a wait)
     int exit_status = 0;
     int waited_pid = consume_wait_result(parent, target_pid, &exit_status);
     if (waited_pid > 0) {
         if (status != NULL) {
             *status = exit_status;
         }
-        return waited_pid;
+        return waited_pid;  // Retorno inmediato
     }
 
     pcb_t *target_child = NULL;

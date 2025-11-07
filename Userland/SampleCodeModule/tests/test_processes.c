@@ -76,7 +76,7 @@ int64_t test_processes(uint64_t argc, char *argv[]) {
 
   while (1) {
 
-    // Create max_processes processes
+    // Crear max_processes procesos
     for (rq = 0; rq < max_processes; rq++) {
       p_rqs[rq].pid = my_create_process("endless_loop_wrapper", 0, argvAux);
 
@@ -91,7 +91,7 @@ int64_t test_processes(uint64_t argc, char *argv[]) {
     printf("\nProcesos creados. Estado actual:\n");
     print_processes_info();
 
-    // Randomly kills, blocks or unblocks processes until every one has been killed
+    // Matar, bloquear o desbloquear procesos aleatoriamente hasta que todos hayan sido eliminados
     while (alive > 0) {
 
       for (rq = 0; rq < max_processes; rq++) {
@@ -121,7 +121,7 @@ int64_t test_processes(uint64_t argc, char *argv[]) {
         }
       }
 
-      // Randomly unblocks processes
+      // Desbloquear procesos aleatoriamente
       for (rq = 0; rq < max_processes; rq++)
         if (p_rqs[rq].state == BLOCKED && GetUniform(100) % 2) {
           if (my_unblock(p_rqs[rq].pid) == -1) {
