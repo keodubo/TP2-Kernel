@@ -295,42 +295,42 @@ extern int mem_command(int argc, char **argv);
 
 void printHelp()
 {
-	printsColor("\n\n===== Listing a preview of available commands =====\n", MAX_BUFF, GREEN);
-	printsColor("\n>'help' or 'ls'     - displays this shell information", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>time               - display current time", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>clear              - clear the display", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>(+)                - increase font size (scaled)", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>(-)                - decrease font size (scaled)", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>registersinfo      - print current register values", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>zerodiv            - testeo divide by zero exception", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>invopcode          - testeo invalid op code exception", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>ps                 - list all processes", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>loop [-p prio]     - prints short greeting and process PID", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>nice <pid> <prio>  - change a given's process priority", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>kill <pid>         - kill specified process", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>block <pid>        - toggle process between BLOCKED and READY", MAX_BUFF, LIGHT_BLUE);
-    printsColor("\n>yield              - yield the CPU", MAX_BUFF, LIGHT_BLUE);
-    printsColor("\n>waitpid <pid|-1>   - wait for a child to finish", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>echo <text>        - print text to stdout", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>mem [-v]           - show memory usage statistics", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>cat                - read from stdin and write to stdout", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>wc                 - count lines from stdin", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>filter             - remove vowels from stdin", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>test_mm [size]     - test memory manager (default: 100000000)", MAX_BUFF, YELLOW);
-	printsColor("\n>test_processes [n] - test process management (default: 10)", MAX_BUFF, YELLOW);
-    printsColor("\n>test_priority [n]  - scheduling demo (default: 5)", MAX_BUFF, YELLOW);
-	printsColor("\n>test_no_synchro [n]- run race condition without semaphores", MAX_BUFF, YELLOW);
-	printsColor("\n>test_synchro [n]   - run synchronized version using semaphores", MAX_BUFF, YELLOW);
-	printsColor("\n>mvar <writers> <readers> - start colored MVar demo", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n>exit               - exit KERNEL OS", MAX_BUFF, LIGHT_BLUE);
-	printsColor("\n\n", MAX_BUFF, WHITE);
-	printsColor("Background execution:\n", MAX_BUFF, GREEN);
-	printsColor("  cmd &  - Execute command in background (no wait)\n", MAX_BUFF, CYAN);
-	printsColor("Pipe examples:\n", MAX_BUFF, GREEN);
-	printsColor("  echo hola | wc         - count lines in 'hola'\n", MAX_BUFF, CYAN);
-	printsColor("  echo \"hola mundo\" | wc  - count lines with spaces\n", MAX_BUFF, CYAN);
-	printsColor("  echo abracadabra | filter - remove vowels\n", MAX_BUFF, CYAN);
-	printsColor("  cat | filter           - read input and filter vowels\n\n", MAX_BUFF, CYAN);
+	printf("\n\n===== Listing a preview of available commands =====\n");
+	printf("\n>'help' or 'ls'     - displays this shell information");
+	printf("\n>time               - display current time");
+	printf("\n>clear              - clear the display");
+	printf("\n>(+)                - increase font size (scaled)");
+	printf("\n>(-)                - decrease font size (scaled)");
+	printf("\n>registersinfo      - print current register values");
+	printf("\n>zerodiv            - testeo divide by zero exception");
+	printf("\n>invopcode          - testeo invalid op code exception");
+	printf("\n>ps                 - list all processes");
+	printf("\n>loop [-p prio]     - prints short greeting and process PID");
+	printf("\n>nice <pid> <prio>  - change a given's process priority");
+	printf("\n>kill <pid>         - kill specified process");
+	printf("\n>block <pid>        - toggle process between BLOCKED and READY");
+	printf("\n>yield              - yield the CPU");
+	printf("\n>waitpid <pid|-1>   - wait for a child to finish");
+	printf("\n>echo <text>        - print text to stdout");
+	printf("\n>mem [-v]           - show memory usage statistics");
+	printf("\n>cat                - read from stdin and write to stdout");
+	printf("\n>wc                 - count lines from stdin");
+	printf("\n>filter             - remove vowels from stdin");
+	printf("\n>test_mm [size]     - test memory manager (default: 100000000)");
+	printf("\n>test_processes [n] - test process management (default: 10)");
+	printf("\n>test_priority [n]  - scheduling demo (default: 5)");
+	printf("\n>test_no_synchro [n]- run race condition without semaphores");
+	printf("\n>test_synchro [n]   - run synchronized version using semaphores");
+	printf("\n>mvar <writers> <readers> - start colored MVar demo");
+	printf("\n>exit               - exit KERNEL OS");
+	printf("\n\n");
+	printf("Background execution:\n");
+	printf("  cmd &  - Execute command in background (no wait)\n");
+	printf("Pipe examples:\n");
+	printf("  echo hola | wc         - count lines in 'hola'\n");
+	printf("  echo \"hola mundo\" | wc  - count lines with spaces\n");
+	printf("  echo abracadabra | filter - remove vowels\n");
+	printf("  cat | filter           - read input and filter vowels\n\n");
 }
 
 const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "mvar"};
@@ -538,6 +538,166 @@ static int run_pipeline_command(const char *cmd, const char *param) {
 
 	if (strcmp(cmd, "echo") == 0) {
 		echo_output(param, 0);
+		return 0;
+	}
+
+	if (strcmp(cmd, "ps") == 0) {
+		cmd_ps();
+		return 0;
+	}
+
+	if (strcmp(cmd, "help") == 0 || strcmp(cmd, "ls") == 0) {
+		cmd_help();
+		return 0;
+	}
+
+	if (strcmp(cmd, "mem") == 0) {
+		// Guardar parameter anterior y restaurar después
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_mem();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
+		return 0;
+	}
+
+	if (strcmp(cmd, "loop") == 0) {
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_loop();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
+		return 0;
+	}
+
+	if (strcmp(cmd, "time") == 0) {
+		cmd_time();
+		return 0;
+	}
+
+	if (strcmp(cmd, "mvar") == 0) {
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_mvar();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
+		return 0;
+	}
+
+	if (strcmp(cmd, "test_mm") == 0) {
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_test_mm();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
+		return 0;
+	}
+
+	if (strcmp(cmd, "test_processes") == 0) {
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_test_processes();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
+		return 0;
+	}
+
+	if (strcmp(cmd, "test_priority") == 0) {
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_test_priority();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
+		return 0;
+	}
+
+	if (strcmp(cmd, "test_synchro") == 0) {
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_test_synchro();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
+		return 0;
+	}
+
+	if (strcmp(cmd, "test_no_synchro") == 0) {
+		char saved_param[MAX_BUFF + 1];
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			saved_param[i] = parameter[i];
+		}
+		for (int i = 0; i <= MAX_BUFF && param[i] != 0; i++) {
+			parameter[i] = param[i];
+		}
+		if (param[0] == 0) {
+			parameter[0] = 0;
+		}
+		cmd_test_no_synchro();
+		for (int i = 0; i <= MAX_BUFF; i++) {
+			parameter[i] = saved_param[i];
+		}
 		return 0;
 	}
 
@@ -1362,19 +1522,20 @@ void cmd_ps()
 	int count = sys_proc_snapshot(info, MAX_PROCS);
 	if (count <= 0)
 	{
-		prints("\nNo processes to show", MAX_BUFF);
+		printf("\nNo processes to show");
 		return;
 	}
 
-	printsColor("\nPID   PRIO STATE  TICKS FG        SP                BP                NAME", MAX_BUFF, GREEN);
-	prints("\n", MAX_BUFF);
+	// Nota: los colores no funcionarán con pipes, pero el texto sí
+	printf("\nPID   PRIO STATE  TICKS FG        SP                BP                NAME");
+	printf("\n");
 	for (int i = 0; i < count; i++)
 	{
 		const char *state = state_to_string(info[i].state);
 		const char *fg = info[i].fg ? "FG" : "BG";
 		printf("PID %d PRIO %d STATE %s TICKS %d %s ", info[i].pid, info[i].priority, state, info[i].ticks_left, fg);
 		print_hex64(info[i].sp);
-		printc(' ');
+		printf(" ");
 		print_hex64(info[i].bp);
 		printf(" %s\n", info[i].name);
 	}
@@ -1710,40 +1871,40 @@ void cmd_mvar()
 
 	if (!next_token(parameter, &idx, token, sizeof(token)))
 	{
-		printsColor("\nUsage: mvar <writers> <readers>\n", MAX_BUFF, RED);
+		printf("\nUsage: mvar <writers> <readers>\n");
 		return;
 	}
 	if (!parse_int_token(token, &writers) || writers <= 0)
 	{
-		printsColor("\n[mvar] Invalid writer count\n", MAX_BUFF, RED);
+		printf("\n[mvar] Invalid writer count\n");
 		return;
 	}
 	if (!next_token(parameter, &idx, token, sizeof(token)))
 	{
-		printsColor("\nUsage: mvar <writers> <readers>\n", MAX_BUFF, RED);
+		printf("\nUsage: mvar <writers> <readers>\n");
 		return;
 	}
 	if (!parse_int_token(token, &readers) || readers <= 0)
 	{
-		printsColor("\n[mvar] Invalid reader count\n", MAX_BUFF, RED);
+		printf("\n[mvar] Invalid reader count\n");
 		return;
 	}
 
 	if (writers > MVAR_MAX_WRITERS)
 	{
-		printsColor("\n[mvar] Too many writers requested, MAX_WRITERS=26\n", MAX_BUFF, RED);
+		printf("\n[mvar] Too many writers requested, MAX_WRITERS=26\n");
 		return;
 	}
 	if (readers > MVAR_MAX_READERS)
 	{
-		printsColor("\n[mvar] Too many readers requested, MAX_READERS=14\n", MAX_BUFF, RED);
+		printf("\n[mvar] Too many readers requested, MAX_READERS=14\n");
 		return;
 	}
 
 	mvar_launch_info_t info;
 	if (mvar_start(writers, readers, &info) < 0)
 	{
-		printsColor("\n[mvar] Failed to start demo (resources unavailable)\n", MAX_BUFF, RED);
+		printf("\n[mvar] Failed to start demo (resources unavailable)\n");
 		return;
 	}
 
@@ -1837,6 +1998,5 @@ static void format_hex64(uint64_t value, char out[17]) {
 static void print_hex64(uint64_t value) {
 	char buf[17];
 	format_hex64(value, buf);
-	prints("0x", MAX_BUFF);
-	prints(buf, MAX_BUFF);
+	printf("0x%s", buf);
 }

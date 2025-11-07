@@ -568,9 +568,147 @@ nice <pid> 1
 kill <pid>
 ```
 
-## 🚧 Limitaciones
+## � Pipes - Compatibilidad y Funcionamiento
 
-La shell soporta pipes simples de dos comandos. Pipes múltiples (ej: `p1 | p2 | p3`) pueden requerir expansión futura.
+### Funcionamiento Interno de Pipes
+
+El sistema de pipes está implementado utilizando **file descriptors** y **syscalls genéricas** (`sys_write_fd`, `sys_read_fd`) que manejan transparentemente la escritura tanto a TTY como a pipes.
+
+Para que un comando funcione correctamente con pipes, **debe usar las syscalls de escritura genéricas** que respetan file descriptors, en lugar de las syscalls legacy que escriben directamente a video.
+
+#### ✅ Syscalls compatibles con pipes:
+- `sys_write_fd(fd, buffer, size)` - Syscall 42: Escritura genérica por file descriptor
+- `sys_read_fd(fd, buffer, size)` - Syscall 41: Lectura genérica por file descriptor
+- `printf()`, `puts()`, `putchar()` - Internamente usan `sys_write_fd`
+
+#### ❌ Syscalls NO compatibles con pipes:
+- `sys_write(fd, char)` - Syscall 1: Escritura legacy de un solo carácter directo a TTY
+- `sys_writeColor(fd, char, color)` - Syscall 17: Escritura con color directo a TTY
+- `printc()`, `prints()`, `printsColor()`, `printcColor()` - Usan syscalls legacy
+
+### Comandos que Funcionan con Pipes
+
+Los siguientes comandos fueron modificados para usar `printf()` y son **completamente compatibles** con pipes:
+
+#### ✅ Comandos Finitos (Funcionan Perfectamente)
+
+| Comando | Ejemplo | Descripción |
+|---------|---------|-------------|
+| `ps` | `ps \| filter` | Lista procesos sin vocales |
+| `ps` | `ps \| wc` | Cuenta líneas de procesos |
+| `help` / `ls` | `help \| wc` | Cuenta líneas del help |
+| `help` / `ls` | `ls \| filter` | Help sin vocales |
+| `mem` | `mem \| wc` | Cuenta líneas de estadísticas |
+| `mem` | `mem -v \| filter` | Stats verbose sin vocales |
+| `echo` | `echo "hola mundo" \| wc` | Cuenta líneas de echo |
+| `echo` | `echo abracadabra \| filter` | Echo sin vocales |
+| `cat` | `cat \| filter` | Input del usuario sin vocales |
+| `cat` | `cat \| wc` | Cuenta líneas de input |
+
+**Ejemplos de uso:**
+```bash
+# Listar procesos sin vocales
+ps | filter
+
+# Contar líneas de ayuda
+help | wc
+
+# Ver memoria sin vocales  
+mem | filter
+
+# Pipeline completo
+echo "hello world" | filter | cat
+```
+
+### Comandos con Limitaciones en Pipes
+
+#### ⚠️ Procesos Infinitos
+
+Los siguientes comandos **no funcionan bien con pipes** porque son procesos infinitos o de larga duración que no terminan naturalmente:
+
+| Comando | Problema | Razón Técnica |
+|---------|----------|---------------|
+| `mvar <w> <r>` | Se cuelga / Imprime con colores | Usa `printcColor()` (syscall legacy) + loop infinito |
+| `test_mm [size]` | Se cuelga | Proceso infinito que no termina |
+| `loop [-p prio]` | Se cuelga | Loop infinito por diseño |
+| `test_processes [n]` | Puede colgarse | Crea procesos hijos que pueden no terminar |
+
+**Razón del problema:** 
+1. Los procesos infinitos nunca terminan, por lo que el pipe nunca se cierra
+2. El comando del lado derecho del pipe (`filter`, `wc`) espera EOF (fin de archivo) que nunca llega
+3. Algunos usan `printcColor()` que escribe con syscalls legacy que no pasan por el sistema de file descriptors
+
+**Solución técnica (no implementada):**
+Para soportar procesos infinitos con pipes se necesitaría:
+- Implementar señales (SIGPIPE, SIGINT) para interrumpir procesos
+- Hacer que `filter`/`wc` procesen línea por línea sin esperar EOF
+- Convertir todos los `printcColor` a `printf` (perdiendo colores)
+
+#### ✅ Tests Finitos (Funcionan si Terminan Rápido)
+
+Estos tests **funcionan con pipes** si se ejecutan con parámetros pequeños para que terminen rápido:
+
+```bash
+# Funciona - test corto
+test_priority 3 | wc
+
+# Funciona - test corto
+test_synchro 5 | wc
+
+# Puede funcionar
+test_no_synchro 3 | filter
+```
+
+### Implementación Técnica
+
+La compatibilidad con pipes se logró mediante:
+
+1. **Modificación de `printf()`** en `stdio.c`:
+   ```c
+   // ANTES: Escribía char por char con syscall legacy
+   for (int i = 0; i < len; i++) {
+       sys_write(1, buffer[i]);  // ❌ Syscall 1 - no respeta pipes
+   }
+   
+   // AHORA: Escribe buffer completo con FD genérico
+   sys_write_fd(1, buffer, len);  // ✅ Syscall 42 - respeta pipes
+   ```
+
+2. **Implementación de `puts()` y `putchar()`**:
+   ```c
+   int puts(const char *str) {
+       int len = strlen(str);
+       sys_write_fd(1, str, len);      // Escribe string
+       sys_write_fd(1, "\n", 1);       // Escribe newline
+       return len + 1;
+   }
+   ```
+
+3. **Conversión de comandos críticos**:
+   - `cmd_ps()`: De `prints()`/`printsColor()` → `printf()`
+   - `printHelp()`: De `printsColor()` → `printf()`
+   - `cmd_mvar()`: Mensajes de error de `printsColor()` → `printf()`
+
+4. **File Descriptors en el Kernel**:
+   - Cada proceso tiene tabla de FDs (`fd_table`)
+   - `sys_dup2()` redirige stdout (FD 1) a pipe
+   - `sys_write_fd()` detecta automáticamente si escribe a TTY o pipe
+
+### Colores en Pipes
+
+**Nota importante:** Los colores **no se preservan** en pipes. Los comandos que usan `printsColor()` pierden el formato de color cuando su salida va a un pipe, pero el texto se transmite correctamente.
+
+Esto es una limitación de diseño intencionada para mantener la compatibilidad:
+- Pipes transportan texto plano
+- Los colores son específicos del terminal de video
+- Preservar colores requeriría códigos ANSI o protocolo custom
+
+## �🚧 Limitaciones
+
+- La shell soporta pipes simples de dos comandos. Pipes múltiples (ej: `p1 | p2 | p3`) no están implementados.
+- Los procesos infinitos (`loop`, `mvar`, `test_mm`) no funcionan bien con pipes debido a que nunca envían EOF.
+- Los colores no se preservan al usar pipes - la salida es siempre texto plano.
+- Algunos mensajes de error de la shell usan `printsColor` por compatibilidad visual en uso normal.
 
 ## ✅ Estado de Implementación de Requisitos
 

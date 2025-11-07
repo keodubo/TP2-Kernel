@@ -6,5 +6,7 @@
 
 int printf(const char *format, ...);
 int sprintf(char *str, const char *format, ...);
+int puts(const char *str);
+int putchar(int c);
 
 #endif

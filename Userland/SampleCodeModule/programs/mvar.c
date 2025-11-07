@@ -1,7 +1,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <sys_calls.h>
 #include <userlib.h>
 #include "mvar.h"

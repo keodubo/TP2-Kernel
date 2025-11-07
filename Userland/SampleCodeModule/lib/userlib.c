@@ -53,7 +53,7 @@ void playMelody(NoteType *melody, int length)
 
 void printc(char c)
 {
-	sys_write(STDOUT, c);
+	sys_write_fd(STDOUT, &c, 1);
 }
 
 void printcColor(char c, Color color)
@@ -68,9 +68,15 @@ void drawCursor()
 
 void prints(const char *str, int lenght)
 {
-	for (int i = 0; i < lenght && str[i] != 0; i++)
-	{
-		printc(str[i]);
+	// Calcular longitud real (hasta null terminator o lenght)
+	int len = 0;
+	while (len < lenght && str[len] != 0) {
+		len++;
+	}
+	
+	// Escribir todo de una vez usando sys_write_fd
+	if (len > 0) {
+		sys_write_fd(STDOUT, str, len);
 	}
 }
 

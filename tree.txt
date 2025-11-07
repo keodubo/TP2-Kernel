@@ -4,19 +4,15 @@
 │   │   ├── BareMetal File System.md
 │   │   ├── Makefile
 │   │   ├── README.md
-│   │   ├── bmfs.bin
 │   │   └── bmfs.c
 │   ├── Makefile
 │   └── Pure64
 │       ├── Makefile
 │       ├── Pure64 Manual.md
-│       ├── bmfs_mbr.sys
 │       ├── build.bat
 │       ├── docs
 │       │   ├── CREDITS.TXT
 │       │   └── LICENSE.TXT
-│       ├── pure64.sys
-│       ├── pxestart.sys
 │       ├── readme.md
 │       └── src
 │           ├── bootsectors
@@ -34,35 +30,26 @@
 │           ├── pure64.asm
 │           ├── syscalls.asm
 │           └── sysvar.asm
+├── ISSUES.md
 ├── Image
-│   ├── Makefile
-│   ├── packedKernel.bin
-│   ├── x64BareBonesImage.img
-│   ├── x64BareBonesImage.qcow2
-│   └── x64BareBonesImage.vmdk
+│   └── Makefile
 ├── Kernel
 │   ├── Makefile
 │   ├── Makefile.inc
 │   ├── asm
 │   │   ├── context_switch.asm
-│   │   ├── context_switch.o
 │   │   ├── interrupts.asm
-│   │   ├── interrupts.o
-│   │   ├── libasm.asm
-│   │   └── libasm.o
-│   ├── buddy_system.c
+│   │   └── libasm.asm
 │   ├── buddy_system.o
 │   ├── drivers
 │   │   ├── keyboard.c
-│   │   ├── keyboard.o
 │   │   ├── sound.c
-│   │   ├── sound.o
-│   │   ├── videoDriver.c
-│   │   └── videoDriver.o
-│   ├── fd.c
+│   │   └── videoDriver.c
 │   ├── fd.o
-│   ├── first_fit.c
 │   ├── first_fit.o
+│   ├── fs
+│   │   ├── fd.c
+│   │   └── tty.c
 │   ├── include
 │   │   ├── buddy_system.h
 │   │   ├── defs.h
@@ -89,47 +76,45 @@
 │   │   └── videoDriver.h
 │   ├── interrupt
 │   │   ├── exceptions.c
-│   │   ├── exceptions.o
 │   │   ├── idtLoader.c
-│   │   ├── idtLoader.o
-│   │   ├── sysCallDispatcher.c
-│   │   └── sysCallDispatcher.o
-│   ├── kernel.bin
+│   │   └── sysCallDispatcher.c
+│   ├── ipc
+│   │   ├── pipe.c
+│   │   ├── pipe_fd.c
+│   │   └── semaphore.c
 │   ├── kernel.c
-│   ├── kernel.elf
 │   ├── kernel.ld
-│   ├── kernel.o
-│   ├── lib.c
+│   ├── lib
+│   │   ├── lib.c
+│   │   └── naiveConsole.c
 │   ├── lib.o
 │   ├── loader.asm
-│   ├── loader.o
-│   ├── memory_manager.c
 │   ├── memory_manager.o
-│   ├── moduleLoader.c
+│   ├── mm
+│   │   ├── buddy_system.c
+│   │   ├── first_fit.c
+│   │   └── memory_manager.c
 │   ├── moduleLoader.o
-│   ├── naiveConsole.c
 │   ├── naiveConsole.o
-│   ├── pipe.c
 │   ├── pipe.o
-│   ├── pipe_fd.c
 │   ├── pipe_fd.o
-│   ├── proc.c
 │   ├── proc.o
-│   ├── sched.c
+│   ├── process
+│   │   ├── proc.c
+│   │   └── sched.c
 │   ├── sched.o
-│   ├── semaphore.c
 │   ├── semaphore.o
-│   ├── syscalls.c
+│   ├── sys
+│   │   ├── moduleLoader.c
+│   │   ├── syscalls.c
+│   │   └── time.c
 │   ├── syscalls.o
-│   ├── time.c
 │   ├── time.o
-│   ├── tty.c
 │   └── tty.o
 ├── License.txt
 ├── Makefile
 ├── README.md
 ├── Readme.txt
-├── TP_2_English.md
 ├── Toolchain
 │   ├── Makefile
 │   └── ModulePacker
@@ -138,9 +123,6 @@
 │       ├── modulePacker.h
 │       └── mp.bin
 ├── Userland
-│   ├── 0000-sampleCodeModule.bin
-│   ├── 0000-sampleCodeModule.elf
-│   ├── 0001-sampleDataModule.bin
 │   ├── Makefile
 │   ├── Makefile.inc
 │   ├── SampleCodeModule
@@ -149,8 +131,6 @@
 │   │   ├── asm
 │   │   │   ├── exc_test.asm
 │   │   │   └── sys_calls.asm
-│   │   ├── cat.c
-│   │   ├── filter.c
 │   │   ├── include
 │   │   │   ├── ascii.h
 │   │   │   ├── colors.h
@@ -162,28 +142,30 @@
 │   │   │   ├── sys_calls.h
 │   │   │   ├── time.h
 │   │   │   └── userlib.h
-│   │   ├── loop.c
-│   │   ├── mem.c
-│   │   ├── mvar.c
-│   │   ├── obj
-│   │   │   ├── exc_test.asm.o
-│   │   │   └── sys_calls.asm.o
+│   │   ├── lib
+│   │   │   ├── stdio.c
+│   │   │   └── userlib.c
+│   │   ├── programs
+│   │   │   ├── cat.c
+│   │   │   ├── filter.c
+│   │   │   ├── loop.c
+│   │   │   ├── mem.c
+│   │   │   ├── mvar.c
+│   │   │   ├── time.c
+│   │   │   └── wc.c
 │   │   ├── sampleCodeModule.c
 │   │   ├── sampleCodeModule.ld
-│   │   ├── sh.c
-│   │   ├── stdio.c
-│   │   ├── tests
-│   │   │   ├── syscall.c
-│   │   │   ├── syscall.h
-│   │   │   ├── test_mm.c
-│   │   │   ├── test_prio.c
-│   │   │   ├── test_processes.c
-│   │   │   ├── test_sync.c
-│   │   │   ├── test_util.c
-│   │   │   └── test_util.h
-│   │   ├── time.c
-│   │   ├── userlib.c
-│   │   └── wc.c
+│   │   ├── shell
+│   │   │   └── sh.c
+│   │   └── tests
+│   │       ├── syscall.c
+│   │       ├── syscall.h
+│   │       ├── test_mm.c
+│   │       ├── test_prio.c
+│   │       ├── test_processes.c
+│   │       ├── test_sync.c
+│   │       ├── test_util.c
+│   │       └── test_util.h
 │   └── include
 │       └── mm_stats.h
 ├── run.sh
@@ -191,4 +173,4 @@
 ├── x64BareBones.png
 └── x64BareBones.sublime-project
 
-23 directories, 169 files
+31 directories, 143 files

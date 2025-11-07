@@ -136,16 +136,14 @@ int printf(const char *format, ...) {
         
         // Vaciar buffer si se esta llenando
         if (ptr - buffer > 1000) {
-            for (int i = 0; i < ptr - buffer; i++) {
-                sys_write(1, buffer[i]);
-            }
+            sys_write_fd(1, buffer, ptr - buffer);
             ptr = buffer;
         }
     }
     
     // Vaciar el buffer restante
-    for (int i = 0; i < ptr - buffer; i++) {
-        sys_write(1, buffer[i]);
+    if (ptr > buffer) {
+        sys_write_fd(1, buffer, ptr - buffer);
     }
     
     va_end(args);
@@ -205,4 +203,28 @@ int sprintf(char *str, const char *format, ...) {
     *ptr = '\0';
     va_end(args);
     return count;
+}
+
+// Implementación de puts - escribe string + newline a stdout
+int puts(const char *str) {
+    if (str == NULL) {
+        return -1;
+    }
+    
+    int len = 0;
+    const char *s = str;
+    while (*s++) {
+        len++;
+    }
+    
+    sys_write_fd(1, str, len);
+    sys_write_fd(1, "\n", 1);
+    return len + 1;
+}
+
+// Implementación de putchar - escribe un carácter a stdout
+int putchar(int c) {
+    char ch = (char)c;
+    sys_write_fd(1, &ch, 1);
+    return (unsigned char)c;
 }

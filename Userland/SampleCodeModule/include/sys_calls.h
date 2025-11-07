@@ -42,6 +42,7 @@ uint64_t sys_registerInfo(uint64_t reg[17]);
 
 uint64_t sys_printmem(uint64_t mem);
 
+// Legacy syscalls (para compatibilidad - escriben UN SOLO CARÁCTER)
 uint64_t sys_read(uint64_t fd, char *buf);
 
 uint64_t sys_write(uint64_t fd, const char buf);
