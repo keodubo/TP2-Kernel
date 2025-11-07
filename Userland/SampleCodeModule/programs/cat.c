@@ -1,12 +1,10 @@
 // cat.c - Lee de stdin y escribe a stdout
 #include <stdio.h>
 #include <sys_calls.h>
+#include <spawn_args.h>
 
 // Lee en bloques y solo imprime cuando detecta fin de línea o EOF
-int cat_main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    
+void cat_main(int argc, char **argv) {
     char buf[256];
     int used = 0;
     int n;
@@ -43,6 +41,6 @@ int cat_main(int argc, char **argv) {
         // EOF: volcar lo que quedó sin salto de línea
         sys_write_fd(1, buf, used);
     }
-    
-    return 0;
+    free_spawn_args(argv, argc);
+    sys_exit(0);
 }

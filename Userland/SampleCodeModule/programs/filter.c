@@ -1,6 +1,7 @@
 // filter.c - Filtra vocales (a,e,i,o,u,A,E,I,O,U)
 #include <stdio.h>
 #include <sys_calls.h>
+#include <spawn_args.h>
 
 // Devuelve 1 si el carácter es una vocal ASCII
 static int is_vowel(char c) {
@@ -8,10 +9,7 @@ static int is_vowel(char c) {
             c == 'A' || c == 'E' || c == 'I' || c == 'O' || c == 'U');
 }
 
-int filter_main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    
+void filter_main(int argc, char **argv) {
     char buf[256];
     char out[256];
     int n;
@@ -27,6 +25,6 @@ int filter_main(int argc, char **argv) {
             sys_write_fd(1, out, j);
         }
     }
-    
-    return 0;
+    free_spawn_args(argv, argc);
+    sys_exit(0);
 }

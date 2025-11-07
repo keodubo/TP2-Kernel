@@ -332,7 +332,7 @@ La shell implementa:
 
 #### Comandos Implementados
 
-Todos los comandos se ejecutan como **procesos de usuario** (no built-ins), lo que permite:
+Todos los comandos se ejecutan como **procesos de usuario separados** mediante `sys_create_process_ex()`, permitiendo ejecución aislada y compatibilidad con pipes:
 
 - ✅ Ejecución en background (con `&`).
 - ✅ Compatibilidad con pipes.
@@ -870,3 +870,4 @@ Durante el desarrollo de este proyecto se utilizaron herramientas de inteligenci
 ---
 
 **Resultado:** ✅ **Todos los requisitos obligatorios cumplidos**
+.

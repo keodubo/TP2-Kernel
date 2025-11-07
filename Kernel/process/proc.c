@@ -185,7 +185,13 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     ncPrintDec(proc->pid);
     ncPrint(" prio=");
     ncPrintDec(proc->priority);
+    ncPrint(" name=");
+    ncPrint(proc->name);
     ncNewline();
+    if (proc->name[0] == 'p' && proc->name[1] == 's' && proc->name[2] == '\0') {
+        ncPrint("[KERNEL proc_create] -> ps command scheduled\n");
+        ncNewline();
+    }
 
     // Si el proceso se crea como foreground, actualizar la TTY
     if (fg) {
@@ -611,6 +617,11 @@ static void copy_name(char *dst, const char *src, size_t max_len) {
 
 static void trampoline(pcb_t *proc) {
     ncPrint("[KERNEL trampoline] Entered!\n");
+    if (proc != NULL) {
+        ncPrint("[KERNEL trampoline] proc name: ");
+        ncPrint(proc->name);
+        ncNewline();
+    }
     if (proc == NULL) {
         ncPrint("[KERNEL trampoline] ERROR: proc is NULL\n");
         proc_exit(-1);
@@ -622,6 +633,10 @@ static void trampoline(pcb_t *proc) {
         while (1) _hlt();
     }
     ncPrint("[KERNEL trampoline] Calling entry...\n");
+    if (proc->name[0] == 'p' && proc->name[1] == 's' && proc->name[2] == '\0') {
+        ncPrint("[KERNEL trampoline] Calling ps entry\n");
+        ncNewline();
+    }
     proc->entry(proc->argc, proc->argv);
     ncPrint("[KERNEL trampoline] Entry returned, exiting...\n");
     proc_exit(0);

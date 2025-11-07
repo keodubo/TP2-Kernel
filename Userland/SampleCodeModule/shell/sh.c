@@ -4,8 +4,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <sys_calls.h>
+#include <spawn_args.h>
 #include <colors.h>
 #include <sh.h>
+#include <parse_utils.h>
 #include <ascii.h>
 #include <mvar.h>
 #include "../tests/test_util.h"
@@ -22,9 +24,15 @@ uint64_t test_no_synchro(uint64_t argc, char *argv[]);
 uint64_t test_synchro(uint64_t argc, char *argv[]);
 
 // Declaraciones de los comandos de pipes
-int cat_main(int argc, char **argv);
-int wc_main(int argc, char **argv);
-int filter_main(int argc, char **argv);
+void cat_main(int argc, char **argv);
+void wc_main(int argc, char **argv);
+void filter_main(int argc, char **argv);
+void ps_main(int argc, char **argv);
+void help_main(int argc, char **argv);
+void nice_main(int argc, char **argv);
+void kill_main(int argc, char **argv);
+void block_main(int argc, char **argv);
+void mem_main(int argc, char **argv);
 
 #define SHELL_STDIN 0
 #define SHELL_STDOUT 1
@@ -41,12 +49,13 @@ static int run_pipeline_command(const char *cmd, const char *param);
 static int has_pipe(char *str);
 static void execute_pipe(char *left_line, char *right_line);
 
-static void format_hex64(uint64_t value, char out[17]);
-static void print_hex64(uint64_t value);
-
 static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int index, const char *fallback);
-static void free_spawn_args(char **argv, int argc);
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv);
+static char *dup_arg_string(const char *src);
+static void free_partial_args(char **argv, int count);
+static char **build_spawn_argv(const char *cmd_name, const char **extra_args, int extra_count, int *argc_out);
+static int64_t spawn_user_command(void (*entry)(int, char **), int argc, char **argv, const char *name);
+static int spawn_pipeline_process(const char *name, void (*entry)(int, char **), const char **args, int arg_count);
 static void debug_log(const char *tag, const char *msg);
 static void debug_log_u64(const char *tag, const char *label, uint64_t value);
 static void debug_dump_args(const char *tag, int argc, char **argv);
@@ -77,18 +86,6 @@ static void copy_arg_or_default(char *dst, size_t dst_len, char **argv, int inde
 	dst[i] = '\0';
 }
 
-static void free_spawn_args(char **argv, int argc) {
-	if (argv == NULL) {
-		return;
-	}
-	for (int i = 0; i < argc; i++) {
-		if (argv[i] != NULL) {
-			sys_free(argv[i]);
-		}
-	}
-	sys_free(argv);
-}
-
 static int64_t spawn_test_process(const char *name, void (*entry)(int, char **), int argc, char **argv) {
     DBG_MSG("spawn_test_process");
     DBG_VAL("argc", (uint64_t)argc);
@@ -100,6 +97,119 @@ static int64_t spawn_test_process(const char *name, void (*entry)(int, char **),
     }
     DBG_VAL("spawned pid", (uint64_t)pid);
     return pid;
+}
+
+static char *dup_arg_string(const char *src) {
+	if (src == NULL) {
+		return NULL;
+	}
+	size_t len = strlen(src) + 1;
+	char *dst = (char *)sys_malloc(len);
+	if (dst == NULL) {
+		return NULL;
+	}
+	strcpy(dst, src);
+	return dst;
+}
+
+static void free_partial_args(char **argv, int count) {
+	if (argv == NULL) {
+		return;
+	}
+	for (int i = 0; i < count; i++) {
+		if (argv[i] != NULL) {
+			sys_free(argv[i]);
+		}
+	}
+	sys_free(argv);
+}
+
+static char **build_spawn_argv(const char *cmd_name, const char **extra_args, int extra_count, int *argc_out) {
+	if (cmd_name == NULL) {
+		return NULL;
+	}
+
+	int total = 1 + (extra_count > 0 ? extra_count : 0);
+	char **argv = (char **)sys_malloc(sizeof(char *) * (total + 1));
+	if (argv == NULL) {
+		return NULL;
+	}
+
+	int filled = 0;
+	argv[filled] = dup_arg_string(cmd_name);
+	if (argv[filled] == NULL) {
+		free_partial_args(argv, filled);
+		return NULL;
+	}
+	filled++;
+
+	for (int i = 0; i < extra_count; i++) {
+		if (extra_args == NULL || extra_args[i] == NULL) {
+			free_partial_args(argv, filled);
+			return NULL;
+		}
+		argv[filled] = dup_arg_string(extra_args[i]);
+		if (argv[filled] == NULL) {
+			free_partial_args(argv, filled);
+			return NULL;
+		}
+		filled++;
+	}
+
+	argv[total] = NULL;
+	if (argc_out != NULL) {
+		*argc_out = total;
+	}
+	return argv;
+}
+
+static int64_t spawn_user_command(void (*entry)(int, char **), int argc, char **argv, const char *name) {
+	DBG_MSG("spawn_user_command enter");
+	DBG_VAL("is_background", (uint64_t)is_background);
+	DBG_VAL("argc", (uint64_t)argc);
+
+	int64_t pid = sys_create_process_ex(entry, argc, argv, name, DEFAULT_PRIORITY, is_background ? 0 : 1);
+	DBG_VAL("spawn_user_command pid", (uint64_t)pid);
+
+	if (pid < 0 && argv != NULL) {
+		free_spawn_args(argv, argc);
+		return pid;
+	}
+
+	if (!is_background) {
+		DBG_MSG("spawn_user_command waiting child");
+		int status = 0;
+		int waited = (int)sys_wait_pid((int)pid, &status);
+		DBG_VAL("spawn_user_command waited_pid", (uint64_t)waited);
+		DBG_VAL("spawn_user_command status", (uint64_t)status);
+	} else {
+		DBG_MSG("spawn_user_command background");
+		printc('\n');
+		printPrompt();
+	}
+
+	DBG_MSG("spawn_user_command exit");
+	return pid;
+}
+
+static int spawn_pipeline_process(const char *name, void (*entry)(int, char **), const char **args, int arg_count) {
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv(name, args, arg_count, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\n[pipe] Failed to allocate argv\n", MAX_BUFF, RED);
+		return -1;
+	}
+
+	int64_t pid = sys_create_process_ex(entry, argc_spawn, argv_spawn, name, DEFAULT_PRIORITY, 1);
+	if (pid < 0) {
+		free_spawn_args(argv_spawn, argc_spawn);
+		printsColor("\n[pipe] Failed to spawn process\n", MAX_BUFF, RED);
+		return -1;
+	}
+
+	int status = 0;
+	sys_wait_pid((int)pid, &status);
+	return status;
 }
 
 static void debug_log(const char *tag, const char *msg) {
@@ -237,6 +347,62 @@ void test_synchro_process(int argc, char **argv) {
 	sys_exit(0);
 }
 
+// Wrapper processes for commands (must be in sh.c for proper linkage)
+static void ps_process(int argc, char **argv) {
+	DBG_MSG("ps_process wrapper start");
+	ps_main(argc, argv);
+	// ps_main calls sys_exit, but just in case:
+	sys_exit(0);
+}
+
+static void help_process(int argc, char **argv) {
+	DBG_MSG("help_process wrapper start");
+	help_main(argc, argv);
+	sys_exit(0);
+}
+
+static void nice_process(int argc, char **argv) {
+	DBG_MSG("nice_process wrapper start");
+	nice_main(argc, argv);
+	sys_exit(0);
+}
+
+static void kill_process(int argc, char **argv) {
+	DBG_MSG("kill_process wrapper start");
+	kill_main(argc, argv);
+	sys_exit(0);
+}
+
+static void block_process(int argc, char **argv) {
+	DBG_MSG("block_process wrapper start");
+	block_main(argc, argv);
+	sys_exit(0);
+}
+
+static void mem_process(int argc, char **argv) {
+	DBG_MSG("mem_process wrapper start");
+	mem_main(argc, argv);
+	sys_exit(0);
+}
+
+static void cat_process(int argc, char **argv) {
+	DBG_MSG("cat_process wrapper start");
+	cat_main(argc, argv);
+	sys_exit(0);
+}
+
+static void wc_process(int argc, char **argv) {
+	DBG_MSG("wc_process wrapper start");
+	wc_main(argc, argv);
+	sys_exit(0);
+}
+
+static void filter_process(int argc, char **argv) {
+	DBG_MSG("filter_process wrapper start");
+	filter_main(argc, argv);
+	sys_exit(0);
+}
+
 // initialize all to 0
 char line[MAX_BUFF + 1] = {0};
 char parameter[MAX_BUFF + 1] = {0};
@@ -254,9 +420,7 @@ char usernameLength = 4;
 // Declaraciones adelantadas
 int isUpperArrow(char c);
 int isDownArrow(char c);
-static const char *state_to_string(int state);
 static int next_token(const char *src, int *index, char *out, int max_len);
-static int parse_int_token(const char *token, int *value);
 static void loop_process(int argc, char **argv);
 
 // Forward declarations for cmd functions
@@ -522,18 +686,15 @@ static int run_pipeline_command(const char *cmd, const char *param) {
 	}
 
 	if (strcmp(cmd, "cat") == 0) {
-		char *argv_cat[1] = {"cat"};
-		return cat_main(1, argv_cat);
+		return spawn_pipeline_process("cat", cat_process, NULL, 0);
 	}
 
 	if (strcmp(cmd, "wc") == 0) {
-		char *argv_wc[1] = {"wc"};
-		return wc_main(1, argv_wc);
+		return spawn_pipeline_process("wc", wc_process, NULL, 0);
 	}
 
 	if (strcmp(cmd, "filter") == 0) {
-		char *argv_filter[1] = {"filter"};
-		return filter_main(1, argv_filter);
+		return spawn_pipeline_process("filter", filter_process, NULL, 0);
 	}
 
 	if (strcmp(cmd, "echo") == 0) {
@@ -953,7 +1114,16 @@ int checkLine()
 
 void cmd_help()
 {
-	printHelp();
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("help", NULL, 0, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nhelp: failed to allocate args\n", MAX_BUFF, RED);
+		return;
+	}
+
+	if (spawn_user_command(help_process, argc_spawn, argv_spawn, "help") < 0) {
+		printsColor("\nhelp: failed to spawn process\n", MAX_BUFF, RED);
+	}
 }
 
 void cmd_undefined()
@@ -1424,23 +1594,6 @@ void cmd_debug()
 	}
 }
 
-static const char *state_to_string(int state) {
-	switch (state) {
-	case 0:
-		return "NEW";
-	case 1:
-		return "READY";
-	case 2:
-		return "RUN";
-	case 3:
-		return "BLOCK";
-	case 4:
-		return "EXIT";
-	default:
-		return "?";
-	}
-}
-
 static int next_token(const char *src, int *index, char *out, int max_len) {
 	int i = *index;
 	while (src[i] == ' ') {
@@ -1458,30 +1611,6 @@ static int next_token(const char *src, int *index, char *out, int max_len) {
 		i++;
 	}
 	*index = i;
-	return 1;
-}
-
-static int parse_int_token(const char *token, int *value) {
-	if (token == NULL || token[0] == '\0') {
-		return 0;
-	}
-	int sign = 1;
-	if (token[0] == '-') {
-		sign = -1;
-		token++;
-		if (token[0] == '\0') {
-			return 0;
-		}
-	}
-	uint64_t parsed = charToInt((char *)token);
-	if (parsed == (uint64_t)-1) {
-		return 0;
-	}
-	if (sign < 0) {
-		*value = -(int)parsed;
-	} else {
-		*value = (int)parsed;
-	}
 	return 1;
 }
 
@@ -1518,26 +1647,15 @@ static void loop_process(int argc, char **argv) {
 
 void cmd_ps()
 {
-	proc_info_t info[MAX_PROCS];
-	int count = sys_proc_snapshot(info, MAX_PROCS);
-	if (count <= 0)
-	{
-		printf("\nNo processes to show");
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("ps", NULL, 0, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nps: failed to allocate args\n", MAX_BUFF, RED);
 		return;
 	}
 
-	// Nota: los colores no funcionarán con pipes, pero el texto sí
-	printf("\nPID   PRIO STATE  TICKS FG        SP                BP                NAME");
-	printf("\n");
-	for (int i = 0; i < count; i++)
-	{
-		const char *state = state_to_string(info[i].state);
-		const char *fg = info[i].fg ? "FG" : "BG";
-		printf("PID %d PRIO %d STATE %s TICKS %d %s ", info[i].pid, info[i].priority, state, info[i].ticks_left, fg);
-		print_hex64(info[i].sp);
-		printf(" ");
-		print_hex64(info[i].bp);
-		printf(" %s\n", info[i].name);
+	if (spawn_user_command(ps_process, argc_spawn, argv_spawn, "ps") < 0) {
+		printsColor("\nps: failed to spawn process\n", MAX_BUFF, RED);
 	}
 }
 
@@ -1627,151 +1745,105 @@ void cmd_loop()
 void cmd_nice()
 {
 	int idx = 0;
-	char token[MAX_BUFF];
-	int pid;
-	int prio;
+	char pid_token[MAX_BUFF];
+	char prio_token[MAX_BUFF];
+	char extra[MAX_BUFF];
 
-	if (!next_token(parameter, &idx, token, sizeof(token)))
+	if (!next_token(parameter, &idx, pid_token, sizeof(pid_token)))
 	{
 		printsColor("\nUsage: nice <pid> <prio>", MAX_BUFF, RED);
 		return;
 	}
 
-	if (!parse_int_token(token, &pid))
-	{
-		printsColor("\nInvalid pid", MAX_BUFF, RED);
-		return;
-	}
-
-	if (!next_token(parameter, &idx, token, sizeof(token)))
+	if (!next_token(parameter, &idx, prio_token, sizeof(prio_token)))
 	{
 		printsColor("\nUsage: nice <pid> <prio>", MAX_BUFF, RED);
 		return;
 	}
 
-	if (!parse_int_token(token, &prio))
+	if (next_token(parameter, &idx, extra, sizeof(extra)))
 	{
-		printsColor("\nInvalid priority", MAX_BUFF, RED);
+		printsColor("\nnice: too many arguments\n", MAX_BUFF, RED);
 		return;
 	}
 
-	if (prio < MIN_PRIORITY || prio > MAX_PRIORITY)
-	{
-		printsColor("\nPriority out of range (0-3)", MAX_BUFF, RED);
+	const char *args[] = {pid_token, prio_token};
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("nice", args, 2, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nnice: failed to allocate args\n", MAX_BUFF, RED);
 		return;
 	}
 
-	sys_nice(pid, (uint8_t)prio);
-	printf("\nSet pid %d priority to %d\n", pid, prio);
+	if (spawn_user_command(nice_process, argc_spawn, argv_spawn, "nice") < 0) {
+		printsColor("\nnice: failed to spawn process\n", MAX_BUFF, RED);
+	}
 }
 
 void cmd_kill()
 {
 	int idx = 0;
-	char token[MAX_BUFF];
-	int pid;
+	char pid_token[MAX_BUFF];
+	char extra[MAX_BUFF];
 
-	if (!next_token(parameter, &idx, token, sizeof(token)))
+	if (!next_token(parameter, &idx, pid_token, sizeof(pid_token)))
 	{
 		printsColor("\nUsage: kill <pid>", MAX_BUFF, RED);
 		return;
 	}
 
-	if (!parse_int_token(token, &pid))
+	if (next_token(parameter, &idx, extra, sizeof(extra)))
 	{
-		printsColor("\nInvalid pid", MAX_BUFF, RED);
+		printsColor("\nkill: too many arguments\n", MAX_BUFF, RED);
 		return;
 	}
 
-	if (sys_kill(pid) < 0)
-	{
-		printsColor("\nKill failed", MAX_BUFF, RED);
+	const char *args[] = {pid_token};
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("kill", args, 1, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nkill: failed to allocate args\n", MAX_BUFF, RED);
+		return;
 	}
-	else
-	{
-		printf("\nKilled pid %d\n", pid);
+
+	if (spawn_user_command(kill_process, argc_spawn, argv_spawn, "kill") < 0) {
+		printsColor("\nkill: failed to spawn process\n", MAX_BUFF, RED);
 	}
 }
 
 void cmd_block()
 {
 	int idx = 0;
-	char token[MAX_BUFF];
-	int pid;
+	char pid_token[MAX_BUFF];
+	char extra[MAX_BUFF];
 
-	if (!next_token(parameter, &idx, token, sizeof(token)))
+	if (!next_token(parameter, &idx, pid_token, sizeof(pid_token)))
 	{
 		printsColor("\nUsage: block <pid>", MAX_BUFF, RED);
 		return;
 	}
 
-	if (!parse_int_token(token, &pid) || pid <= 0)
+	if (next_token(parameter, &idx, extra, sizeof(extra)))
 	{
-		printsColor("\nInvalid pid", MAX_BUFF, RED);
+		printsColor("\nblock: too many arguments\n", MAX_BUFF, RED);
 		return;
 	}
 
-	int self_pid = (int)sys_getpid();
-	if (pid == self_pid)
-	{
-		printsColor("\nblock: refusing to block the current shell", MAX_BUFF, ORANGE);
+	char shell_pid_buf[16];
+	int shell_pid = (int)sys_getpid();
+	sprintf(shell_pid_buf, "%d", shell_pid);
+
+	const char *args[] = {pid_token, shell_pid_buf};
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("block", args, 2, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nblock: failed to allocate args\n", MAX_BUFF, RED);
 		return;
 	}
 
-	proc_info_t procs[MAX_PROCS];
-	int count = sys_proc_snapshot(procs, MAX_PROCS);
-	if (count <= 0)
-	{
-		printsColor("\nblock: could not read process list", MAX_BUFF, RED);
-		return;
+	if (spawn_user_command(block_process, argc_spawn, argv_spawn, "block") < 0) {
+		printsColor("\nblock: failed to spawn process\n", MAX_BUFF, RED);
 	}
-
-	proc_info_t *target = NULL;
-	for (int i = 0; i < count; i++)
-	{
-		if (procs[i].pid == pid)
-		{
-			target = &procs[i];
-			break;
-		}
-	}
-
-	if (target == NULL)
-	{
-		printsColor("\nblock: pid not found", MAX_BUFF, RED);
-		return;
-	}
-
-	if (target->state == 4)
-	{
-		printsColor("\nblock: process already exited", MAX_BUFF, RED);
-		return;
-	}
-
-	if (target->state == 3)
-	{
-		if (sys_unblock(pid) < 0)
-		{
-			printsColor("\nblock: failed to unblock process", MAX_BUFF, RED);
-			return;
-		}
-		printf("\nProcess %d moved to READY\n", pid);
-		return;
-	}
-
-	if (target->state == 0)
-	{
-		printsColor("\nblock: process not started yet", MAX_BUFF, ORANGE);
-		return;
-	}
-
-	if (sys_block(pid) < 0)
-	{
-		printsColor("\nblock: failed to block process", MAX_BUFF, RED);
-		return;
-	}
-
-	printf("\nProcess %d moved to BLOCKED\n", pid);
 }
 
 void cmd_yield()
@@ -1814,47 +1886,77 @@ void cmd_waitpid()
 
 void cmd_mem()
 {
-	char *argvv[3] = {"mem", NULL, NULL};
-	char arg_buf[64];
+	const char *args[1];
+	char arg_buf[MAX_BUFF];
+	char extra[MAX_BUFF];
 	int idx = 0;
-	int argc_local = 1;
+	int arg_count = 0;
 
 	if (parameter[0] != '\0') {
 		if (!next_token(parameter, &idx, arg_buf, sizeof(arg_buf))) {
 			printsColor("\nmem: invalid argument\n", MAX_BUFF, RED);
 			return;
 		}
-		argvv[argc_local++] = arg_buf;
+		args[arg_count++] = arg_buf;
 
-		char extra[16];
 		if (next_token(parameter, &idx, extra, sizeof(extra))) {
 			printsColor("\nmem: too many arguments\n", MAX_BUFF, RED);
 			return;
 		}
 	}
 
-	int status = mem_command(argc_local, argvv);
-	if (status != 0) {
-		printf("\nmem exited with status %d\n", status);
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("mem", arg_count > 0 ? args : NULL, arg_count, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nmem: failed to allocate args\n", MAX_BUFF, RED);
+		return;
+	}
+
+	if (spawn_user_command(mem_process, argc_spawn, argv_spawn, "mem") < 0) {
+		printsColor("\nmem: failed to spawn process\n", MAX_BUFF, RED);
 	}
 }
 
 void cmd_cat()
 {
-	char *argv[1] = {"cat"};
-	cat_main(1, argv);
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("cat", NULL, 0, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\ncat: failed to allocate args\n", MAX_BUFF, RED);
+		return;
+	}
+
+	if (spawn_user_command(cat_process, argc_spawn, argv_spawn, "cat") < 0) {
+		printsColor("\ncat: failed to spawn process\n", MAX_BUFF, RED);
+	}
 }
 
 void cmd_wc()
 {
-	char *argv[1] = {"wc"};
-	wc_main(1, argv);
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("wc", NULL, 0, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nwc: failed to allocate args\n", MAX_BUFF, RED);
+		return;
+	}
+
+	if (spawn_user_command(wc_process, argc_spawn, argv_spawn, "wc") < 0) {
+		printsColor("\nwc: failed to spawn process\n", MAX_BUFF, RED);
+	}
 }
 
 void cmd_filter()
 {
-	char *argv[1] = {"filter"};
-	filter_main(1, argv);
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("filter", NULL, 0, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nfilter: failed to allocate args\n", MAX_BUFF, RED);
+		return;
+	}
+
+	if (spawn_user_command(filter_process, argc_spawn, argv_spawn, "filter") < 0) {
+		printsColor("\nfilter: failed to spawn process\n", MAX_BUFF, RED);
+	}
 }
 
 void cmd_echo()
@@ -1985,18 +2087,4 @@ void welcome()
 
 	printsColor("    Here's a list of available commands\n", MAX_BUFF, GREEN);
 	printHelp();
-}
-static void format_hex64(uint64_t value, char out[17]) {
-	static const char *digits = "0123456789ABCDEF";
-	for (int i = 15; i >= 0; i--) {
-		out[i] = digits[value & 0xF];
-		value >>= 4;
-	}
-	out[16] = '\0';
-}
-
-static void print_hex64(uint64_t value) {
-	char buf[17];
-	format_hex64(value, buf);
-	printf("0x%s", buf);
 }

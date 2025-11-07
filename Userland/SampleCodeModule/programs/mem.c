@@ -3,6 +3,7 @@
 #include <sys_calls.h>
 #include <userlib.h>
 #include <mm_stats.h>
+#include <spawn_args.h>
 
 static void print_fixed_ratio(uint64_t numerator, uint64_t denominator) {
     if (denominator == 0) {
@@ -147,5 +148,6 @@ int mem_command(int argc, char **argv) {
 
 void mem_main(int argc, char **argv) {
     int status = mem_command(argc, argv);
+    free_spawn_args(argv, argc);
     sys_exit(status);
 }

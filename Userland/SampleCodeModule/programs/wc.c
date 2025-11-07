@@ -1,11 +1,9 @@
 // wc.c - Contador de lineas (Word Count)
 #include <stdio.h>
 #include <sys_calls.h>
+#include <spawn_args.h>
 
-int wc_main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    
+void wc_main(int argc, char **argv) {
     char buf[256];
     int n;
     int lines = 0;
@@ -17,8 +15,8 @@ int wc_main(int argc, char **argv) {
             }
         }
     }
-    
     printf("%d\n", lines);
-    
-    return 0;
+
+    free_spawn_args(argv, argc);
+    sys_exit(0);
 }
