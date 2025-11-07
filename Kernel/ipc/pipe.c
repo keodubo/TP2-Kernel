@@ -1,9 +1,9 @@
 #include <stddef.h>
-#include "include/pipe.h"
-#include "include/memory_manager.h"
-#include "include/interrupts.h"
-#include "include/lib.h"
-#include "include/sched.h"
+#include "pipe.h"
+#include "memory_manager.h"
+#include "interrupts.h"
+#include "lib.h"
+#include "sched.h"
 
 // Implementación de pipes nominales con bloqueo y wakeups explícitos
 

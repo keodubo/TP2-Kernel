@@ -1,5 +1,5 @@
-#include "include/stdio.h"
-#include "include/sys_calls.h"
+#include <stdio.h>
+#include <sys_calls.h>
 #include <stdarg.h>
 #include <stdint.h>
 

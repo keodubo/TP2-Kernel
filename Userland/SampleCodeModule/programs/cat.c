@@ -1,6 +1,6 @@
 // cat.c - Lee de stdin y escribe a stdout
-#include "include/stdio.h"
-#include "include/sys_calls.h"
+#include <stdio.h>
+#include <sys_calls.h>
 
 // Lee en bloques y solo imprime cuando detecta fin de línea o EOF
 int cat_main(int argc, char **argv) {

@@ -1,9 +1,9 @@
 #include <stddef.h>
-#include "include/tty.h"
-#include "include/memory_manager.h"
-#include "include/interrupts.h"
-#include "include/lib.h"
-#include "include/sched.h"
+#include "tty.h"
+#include "memory_manager.h"
+#include "interrupts.h"
+#include "lib.h"
+#include "sched.h"
 #include "videoDriver.h"
 
 // Backend de la TTY principal: buffer circular + colas de procesos bloqueados

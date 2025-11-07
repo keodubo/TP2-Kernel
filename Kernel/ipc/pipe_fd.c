@@ -1,6 +1,6 @@
 #include <stddef.h>
-#include "include/fd.h"
-#include "include/pipe.h"
+#include "fd.h"
+#include "pipe.h"
 
 // Adaptadores para exponer los pipes a través de la interfaz de file descriptors
 

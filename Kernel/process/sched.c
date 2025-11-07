@@ -1,5 +1,5 @@
-#include "include/sched.h"
-#include "include/naiveConsole.h"
+#include "sched.h"
+#include "naiveConsole.h"
 
 // Archivo: sched.c
 // Propósito: Implementación del planificador de procesos del kernel

@@ -1,6 +1,6 @@
-// wc.c - Cuenta líneas en stdin
-#include "include/stdio.h"
-#include "include/sys_calls.h"
+// wc.c - Contador de lineas (Word Count)
+#include <stdio.h>
+#include <sys_calls.h>
 
 int wc_main(int argc, char **argv) {
     (void)argc;

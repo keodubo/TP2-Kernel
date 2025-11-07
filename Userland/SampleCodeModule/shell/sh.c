@@ -1731,12 +1731,12 @@ void cmd_mvar()
 
 	if (writers > MVAR_MAX_WRITERS)
 	{
-		printsColor("\n[mvar] Too many writers requested\n", MAX_BUFF, RED);
+		printsColor("\n[mvar] Too many writers requested, MAX_WRITERS=26\n", MAX_BUFF, RED);
 		return;
 	}
 	if (readers > MVAR_MAX_READERS)
 	{
-		printsColor("\n[mvar] Too many readers requested\n", MAX_BUFF, RED);
+		printsColor("\n[mvar] Too many readers requested, MAX_READERS=14\n", MAX_BUFF, RED);
 		return;
 	}
 

@@ -1,11 +1,11 @@
-#include "include/sched.h"
-#include "include/memory_manager.h"
-#include "include/lib.h"
-#include "include/tty.h"
-#include "include/fd.h"
-#include "include/semaphore.h"
-#include "include/syscalls.h"
-#include "include/naiveConsole.h"
+#include "sched.h"
+#include "memory_manager.h"
+#include "lib.h"
+#include "tty.h"
+#include "fd.h"
+#include "semaphore.h"
+#include "syscalls.h"
+#include "naiveConsole.h"
 
 // Gestion de procesos (PCB)
 // Implementa tabla de procesos, creacion, destruccion, comunicacion

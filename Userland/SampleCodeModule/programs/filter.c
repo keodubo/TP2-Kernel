@@ -1,6 +1,6 @@
 // filter.c - Filtra vocales (a,e,i,o,u,A,E,I,O,U)
-#include "include/stdio.h"
-#include "include/sys_calls.h"
+#include <stdio.h>
+#include <sys_calls.h>
 
 // Devuelve 1 si el carácter es una vocal ASCII
 static int is_vowel(char c) {

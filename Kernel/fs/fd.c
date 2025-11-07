@@ -1,12 +1,12 @@
 #include <stddef.h>
-#include "include/fd.h"
-#include "include/lib.h"
-#include "include/tty.h"
-#include "include/pipe.h"
-#include "include/interrupts.h"
-#include "include/errno.h"
-#include "include/sched.h"
-#include "include/memory_manager.h"
+#include "fd.h"
+#include "lib.h"
+#include "tty.h"
+#include "pipe.h"
+#include "interrupts.h"
+#include "errno.h"
+#include "sched.h"
+#include "memory_manager.h"
 
 // Archivo: fd.c
 // Propósito: Gestor de file descriptors per-proceso con objetos compartidos

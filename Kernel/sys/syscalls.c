@@ -1,11 +1,11 @@
-#include "include/syscalls.h"
-#include "include/sched.h"
-#include "include/semaphore.h"
-#include "include/interrupts.h"
-#include "include/pipe.h"
-#include "include/fd.h"
-#include "include/memory_manager.h"
-#include "include/lib.h"
+#include "syscalls.h"
+#include "sched.h"
+#include "semaphore.h"
+#include "interrupts.h"
+#include "pipe.h"
+#include "fd.h"
+#include "memory_manager.h"
+#include "lib.h"
 
 #ifndef EINVAL
 #define EINVAL 22

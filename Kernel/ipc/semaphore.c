@@ -1,7 +1,7 @@
-#include "include/semaphore.h"
-#include "include/memory_manager.h"
-#include "include/interrupts.h"
-#include "include/lib.h"
+#include "semaphore.h"
+#include "memory_manager.h"
+#include "interrupts.h"
+#include "lib.h"
 
 // Semáforos nominales en kernel space con spinlocks y colas FIFO
 // Implementa creación, espera bloqueante y señalización sin busy-wait
