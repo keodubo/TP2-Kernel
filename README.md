@@ -1,873 +1,251 @@
 # TP2 - Kernel Operating System
 
-Sistema operativo básico desarrollado sobre x64BareBones con gestión de memoria, procesos, sincronización e IPC.
+Sistema operativo desarrollado sobre x64BareBones con gestión de memoria, multitasking, sincronización e IPC.
 
-## 📑 Tabla de Contenidos
+---
 
-- [Entorno y Compilación](#-entorno-y-compilación)
-- [Características Implementadas](#-características-implementadas)
-  - [Gestión de Memoria Física](#1-gestión-de-memoria-física)
-  - [Procesos, Context Switching y Scheduling](#2-procesos-context-switching-y-scheduling)
-  - [Sincronización](#3-sincronización)
-  - [Inter-Process Communication (IPC)](#4-inter-process-communication-ipc)
-  - [Drivers](#5-drivers)
-  - [Aplicaciones de Usuario](#6-user-space-applications)
-- [Caracteres Especiales y Atajos](#️-caracteres-especiales-y-atajos)
-- [Ejemplos de Uso](#-ejemplos-de-uso-reales)
-- [Limitaciones](#-limitaciones)
-- [Estado de Implementación de Requisitos](#-estado-de-implementación-de-requisitos)
-- [Uso de Inteligencia Artificial](#-uso-de-inteligencia-artificial)
-- [Checklist de Evaluación](#-checklist-de-evaluación---requisitos-obligatorios)
+## Instrucciones de Compilación y Ejecución
 
-## 📦 Entorno y Compilación
-
-### Entorno de Compilación Requerido
-
-**IMPORTANTE:** Es **obligatorio** utilizar la imagen Docker provista por la cátedra para compilar el proyecto:
-
-```bash
-docker pull agodio/itba-so-multi-platform:3.0
-```
-
-Este requisito garantiza compatibilidad y reproducibilidad en la evaluación.
-
-### Requisitos Previos
-
-Para ejecutar el proyecto necesitás:
-- **Docker** (obligatorio para compilación)
-- **QEMU** (para ejecución del kernel)
-
-Alternativamente, si tenés las siguientes herramientas instaladas directamente:
-- `nasm`
-- `x86_64-linux-gnu-gcc` (cross-compiler)
-- `qemu-system-x86_64`
-- `make`
+### Requisitos
+- **Docker**: `agodio/itba-so-multi-platform:3.0`
+- **QEMU**: Para ejecutar el kernel
 
 ### Compilación
 
-#### Compilación estándar (First Fit)
-
 ```bash
+# Inicializar entorno Docker
+make docker
+cd Toolchain
 make clean all
-```
+cd ..
 
-#### Compilación con Buddy System
+# Compilar con First Fit (default)
+make clean all
 
-```bash
-make buddy
-```
-
-o alternativamente:
-
-```bash
-make clean
-make MM_FLAG=-DUSE_BUDDY_SYSTEM all
+# O compilar con Buddy System
+make clean buddy
 ```
 
 ### Ejecución
 
-#### Con Docker 
-
-make docker
-
-  Dentro del contenedor:
-
-cd Toolchain
-make clean && make all
-cd ..
-make clean && make all
-
-  Luego desde otra terminal parado en la raiz del proyecto (~/TP2-Kernel)
-
+```bash
 ./run.sh
-
-
-
-O manualmente:
-
-```bash
-qemu-system-x86_64 -cdrom Image/x64BareBonesImage.iso -m 512 -serial stdio
 ```
 
-### Limpieza
+---
 
+## Instrucciones de Replicación
+
+### Comandos de Usuario
+
+Todos los comandos se ejecutan como procesos independientes, soportan pipes (`|`) y ejecución en background (`&`).
+
+#### Comandos Básicos
+
+- **`help`** / **`ls`**: Lista todos los comandos disponibles.
+
+- **`mem [-v]`**: Muestra estadísticas del gestor de memoria.
+  - Sin parámetros: estadísticas básicas (heap total, usado, libre)
+  - `-v`: estadísticas detalladas (bloques, fragmentación)
+
+- **`ps`**: Lista procesos activos (PID, prioridad, estado, ticks, stack/base pointer, nombre).
+
+- **`cat`**: Lee stdin y escribe a stdout. 
+
+- **`wc`**: Cuenta líneas de stdin.
+
+- **`filter`**: Elimina vocales de stdin.
+
+#### Gestión de Procesos
+
+- **`loop [-p priority]`**: Crea proceso de loop infinito.
+  - Sin parámetros: prioridad por defecto
+  - `-p N`: prioridad N (0-3, mayor = más CPU)
+
+- **`kill <pid>`**: Termina proceso por PID.
+
+- **`nice <pid> <priority>`**: Cambia prioridad de proceso (0-3).
+
+- **`block <pid>`**: Bloquea proceso.
+
+- **`unblock <pid>`**: Desbloquea proceso.
+
+- **`yield`**: Cede CPU voluntariamente.
+
+- **`waitpid [pid|-1]`**: Espera terminación de proceso hijo.
+  - Sin parámetros: espera cualquier hijo
+  - `pid`: espera proceso específico
+  - `-1`: espera cualquier hijo
+
+#### Tests del Sistema
+
+- **`test_mm [bytes]`**: Prueba el gestor de memoria.
+  - Parámetro: cantidad de bytes a asignar (default: 100000000)
+  - Realiza ciclos de malloc/free en bloques de tamaño aleatorio
+  - Imprime "test_mm OK" si no hay errores, "test_mm ERROR" en caso contrario
+
+- **`test_processes [n]`**: Prueba creación/destrucción de procesos.
+  - Parámetro: cantidad de procesos a crear (default: 10)
+  - Crea N procesos, los bloquea/mata aleatoriamente, los desbloquea
+  - Imprime estado de cada operación (create/kill/block/unblock)
+
+- **`test_priority [limit]`**: Demuestra scheduling con prioridades.
+  - Parámetro: cantidad de iteraciones por proceso (default: 1500)
+  - **Fase 1**: Crea 3 procesos con prioridad MEDIUM (todos iguales), avanzan uniformemente
+  - **Fase 2**: Cambia prioridades a LOW(0), MEDIUM(1), HIGH(2), el de mayor prioridad avanza más rápido
+  - Cada proceso cuenta hasta el límite e imprime progreso cada 10%
+  - Demuestra que prioridad alta obtiene más CPU time
+
+- **`test_no_synchro [n]`**: Demuestra race conditions.
+  - Parámetro: cantidad de pares inc/dec (default: 5)
+  - Crea N procesos que incrementan y N que decrementan variable global
+  - **Sin sincronización**: resultado final != 0 (race condition)
+  - Imprime valor final
+
+- **`test_synchro [n] [use_sem]`**: Demuestra sincronización con semáforos.
+  - Parámetro 1: cantidad de pares inc/dec (default: 5)
+  - Parámetro 2: 1=con semáforos, 0=sin (default: 1)
+  - **Con semáforos**: resultado final = 0 (correcto)
+  - Imprime valor final
+
+#### Aplicación Avanzada
+
+- **`mvar <writers> <readers>`**: Problema de lectores/escritores.
+  - Parámetro 1: cantidad de escritores
+  - Parámetro 2: cantidad de lectores
+  - Simula MVar de Haskell con sincronización
+  - Escritores escriben caracteres ('A', 'B', 'C'...) con delay aleatorio
+  - Lectores consumen y muestran valores con identificador de color
+  - Ejemplo: `mvar 2 3` → 2 escritores, 3 lectores
+
+### Caracteres Especiales
+
+#### Pipes (`|`)
+Conecta stdout de un comando con stdin del siguiente:
 ```bash
-make clean
+ps | filter              # Lista procesos sin vocales
+help | wc                # Cuenta líneas del help
 ```
 
-## 🎯 Características Implementadas
+**Limitación**: Comandos infinitos (`loop`, `mvar`) no funcionan bien con pipes porque nunca envían EOF.
 
-### 1. Gestión de Memoria Física
-
-#### Memory Managers
-
-El sistema soporta dos algoritmos de gestión de memoria, seleccionables en tiempo de compilación:
-
-- **First Fit** : Asigna el primer bloque libre que sea suficientemente grande.
-- **Buddy System**: Divide la memoria en bloques de tamaño potencia de 2, mejorando fragmentación interna.
-
-**Interfaz común:**
-
-Ambos managers exponen la misma API:
-- `mm_malloc(size_t size)`: Reservar memoria
-- `mm_free(void* ptr)`: Liberar memoria
-- `mm_get_info()`: Obtener estadísticas de memoria
-
-#### System Calls
-
-- `sys_malloc(size_t size)` / `sys_alloc(size_t size)`: Reservar memoria en user space.
-- `sys_free(void* ptr)`: Liberar memoria previamente asignada.
-- `sys_mem_info(memory_info_t* info)`: Consultar información de memoria (total, libre, usada).
-- `sys_mm_get_stats(mm_stats_t* stats)`: Obtener estadísticas detalladas del heap.
-
-#### Tests
-
-- `test_mm [bytes]`: Ejecuta un test exhaustivo del gestor de memoria:
-  - Asigna múltiples bloques hasta agotar memoria disponible
-  - Escribe patrones en cada bloque
-  - Verifica integridad de los datos
-  - Libera todos los bloques
-  - Repite el ciclo infinitamente
-  - Por defecto usa 100,000,000 bytes si no se especifica tamaño
-
-**Ejemplo de uso:**
+#### Background (`&`)
+Ejecuta comando en background (no bloquea la shell):
 ```bash
-test_mm 50000000    # Test con 50MB
-test_mm            # Test con 100MB (default)
+loop -p 2 &              # Loop en background
+test_mm 50000000 &       # Test en background
 ```
 
-**Verificación:** El test pasa sin solapamientos de memoria cuando se ejecuta correctamente.
+### Atajos de Teclado
 
-### 2. Procesos, Context Switching y Scheduling
+- **Ctrl+C**: Interrumpe y mata proceso en foreground.
 
-#### Características
+- **Ctrl+D**: Envía EOF (End-of-File) a stdin, termina entrada interactiva (ej: `cat`).
 
-- **Multitasking preemptivo**: El scheduler roba CPU a procesos que agotan su quantum.
-- **Round Robin con prioridades**: Procesos con mayor prioridad (números menores) ejecutan más frecuentemente.
-- **Context switching completo**: Se guardan/restauran todos los registros, stack pointer, y base pointer.
-- **Foreground y Background**: Soporte para procesos que controlan la TTY y procesos en background.
+### Ejemplos de Uso
 
-#### System Calls
-
-- `sys_create_process(entry_point, argc, argv, name, priority)`: Crear proceso con parámetros.
-- `sys_create_process_ex(entry_point, argc, argv, name, priority, is_fg)`: Crear proceso especificando foreground/background.
-- `sys_exit(int status)`: Terminar proceso actual.
-- `sys_kill(int pid)`: Terminar proceso por PID.
-- `sys_getpid()`: Obtener PID del proceso actual.
-- `sys_proc_snapshot(proc_info_t* info, int max)`: Listar todos los procesos con nombre, id, prioridad, stack, bp, fg/bg.
-- `sys_nice(int pid, uint8_t priority)`: Modificar prioridad de un proceso.
-- `sys_block(int pid)`: Bloquear proceso.
-- `sys_unblock(int pid)`: Desbloquear proceso.
-- `sys_yield()`: Ceder CPU inmediatamente.
-- `sys_wait_pid(int pid, int* status)`: Esperar a que termine un proceso hijo (con `pid=-1` espera cualquier hijo).
-
-#### Comandos de la Shell
-
-- `ps`: Lista todos los procesos con información detallada:
-  ```
-  PID   PRIO STATE  TICKS FG        SP                BP                NAME
-  1     0    RUN    5     Y         0x000000001234     0x000000005678    shell
-  ```
-
-- `loop [-p priority]`: Crea un proceso que hace loop infinito para testing.
-  ```bash
-  loop -p 3    # Loop con prioridad 3
-  loop         # Loop con prioridad por defecto
-  ```
-
-- `kill <pid>`: Mata un proceso por su PID.
-  ```bash
-  kill 5
-  ```
-
-- `nice <pid> <priority>`: Cambia la prioridad de un proceso.
-  ```bash
-  nice 5 1    # Cambiar PID 5 a prioridad 1
-  ```
-
-- `block <pid>`: Bloquea un proceso.
-- `unblock <pid>`: Desbloquea un proceso.
-- `yield`: Hace que el proceso actual ceda la CPU inmediatamente.
-
-- `waitpid [pid|-1]`: Espera a que termine un proceso hijo:
-  ```bash
-  waitpid 5    # Espera a PID 5
-  waitpid -1   # Espera cualquier hijo
-  waitpid      # Espera cualquier hijo (default)
-  ```
-
-#### Tests
-
-- `test_processes [n]`: Test de gestión de procesos:
-  - Crea `n` procesos workers (default: 10)
-  - Los bloquea y desbloquea aleatoriamente
-  - Los mata al finalizar
-  - Verifica que el scheduler funcione correctamente
-
-- `test_priority [n]`: Demostración de scheduling con prioridades:
-  - Crea procesos con diferentes prioridades
-  - Muestra cómo los procesos de mayor prioridad ejecutan más frecuentemente
-  - Por defecto crea 5 procesos
-
-**Características especiales:**
-
-- ✅ El sistema retorna control a la shell tras ejecutar los tests.
-- ✅ Soporta procesos foreground y background.
-- ✅ Timer tick funcionando para preemptión.
-- ✅ Los tests se ejecutan como procesos separados.
-
-### 3. Sincronización
-
-#### Semáforos
-
-Implementación completa de semáforos **sin busy waiting**:
-- Los procesos se bloquean cuando esperan en un semáforo con valor 0.
-- Se despiertan en orden FIFO cuando otro proceso hace `up`.
-- Compartibles entre procesos no relacionados mediante nombres.
-
-#### System Calls
-
-- `sys_sem_open(const char* name, unsigned init)`: Abre/crea semáforo por nombre.
-  - Retorna un handle (entero) que identifica el semáforo.
-  - Si el semáforo no existe, lo crea con el valor inicial especificado.
-  - Si ya existe, retorna el handle existente.
-
-- `sys_sem_wait(int handle)`: Operación `down` (decrementar o bloquearse).
-  - Decrementa el contador si es > 0.
-  - Si el contador es 0, bloquea al proceso hasta que otro haga `post`.
-
-- `sys_sem_post(int handle)`: Operación `up` (incrementar o despertar).
-  - Incrementa el contador si no hay procesos esperando.
-  - Despierta exactamente un proceso en orden FIFO si hay esperando.
-
-- `sys_sem_close(int handle)`: Cierra referencia al semáforo.
-- `sys_sem_unlink(const char* name)`: Elimina el semáforo del namespace cuando todas las referencias están cerradas.
-
-#### Ejemplo de Uso
-
-```c
-int handle = sys_sem_open("mutex", 1);  // Mutex inicializado en 1
-sys_sem_wait(handle);
-/* sección crítica */
-sys_sem_post(handle);
-sys_sem_close(handle);
-sys_sem_unlink("mutex");
-```
-
-#### Tests
-
-- `test_no_synchro [n]`: Ejecuta `2*n` workers que incrementan/decrementan un contador compartido **sin semáforos**.
-  - El resultado final es **variable** en cada ejecución.
-  - Demuestra la condición de carrera.
-
-- `test_synchro [n] [use_sem]`: Ejecuta la versión sincronizada:
-  - Con `use_sem=1` (default): resultado final es **determinísticamente 0**.
-  - Con `use_sem=0`: colapsa al comportamiento no sincronizado.
-  - Demuestra que los semáforos funcionan correctamente.
-
-**Ejemplos:**
+#### Ejemplo 1: Testing de Memoria
 ```bash
-test_no_synchro 5      # Race condition, resultado variable
-test_synchro 5         # Sincronizado, resultado siempre 0
-test_synchro 5 0       # Sin semáforos (igual que test_no_synchro)
-```
+# Ver estado actual
+mem
 
-### 4. Inter-Process Communication (IPC)
-
-#### Pipes Unidireccionales
-
-- **Operaciones bloqueantes**: Lectura y escritura bloquean cuando el pipe está vacío/lleno respectivamente.
-- **Compartibles entre procesos**: Los pipes pueden ser compartidos mediante identificadores (nombres).
-- **Integración con TTY**: Un proceso puede leer/escribir indistintamente desde pipe o terminal según el file descriptor.
-
-#### System Calls
-
-- `sys_pipe_open(const char* name, int mode)`: Abre/crea un pipe por nombre.
-  - `mode=0`: Modo lectura.
-  - `mode=1`: Modo escritura.
-  - Retorna un file descriptor (entero).
-
-- `sys_pipe_read(int fd, void* buf, int count)`: Lee desde el pipe.
-  - Bloquea si el pipe está vacío.
-  - Retorna número de bytes leídos.
-
-- `sys_pipe_write(int fd, const void* buf, int count)`: Escribe en el pipe.
-  - Bloquea si el pipe está lleno.
-  - Retorna número de bytes escritos.
-
-- `sys_pipe_close(int fd)`: Cierra el file descriptor del pipe.
-- `sys_pipe_unlink(const char* name)`: Elimina el pipe cuando todas las referencias están cerradas.
-
-### 5. Drivers
-
-#### Driver de Teclado
-
-- ✅ Interrupciones de teclado manejadas correctamente.
-- ✅ Soporte para teclas especiales (Shift, Ctrl, CapsLock).
-- ✅ Integración con TTY para entrada de caracteres.
-
-#### Driver de Video
-
-- ✅ Modo texto funcional.
-- ✅ Soporte para colores y posicionamiento.
-
-#### System Calls
-
-Las system calls permiten la interacción entre kernel y user space:
-- `sys_read(int fd, void* buf, int count)`: Leer desde file descriptor.
-- `sys_write(int fd, const void* buf, int count)`: Escribir a file descriptor.
-- `sys_close(int fd)`: Cerrar file descriptor.
-- `sys_dup2(int old_fd, int new_fd)`: Duplicar file descriptor.
-
-### 6. User Space Applications
-
-#### Shell (sh)
-
-La shell implementa:
-
-- ✅ Ejecución de procesos en foreground y background.
-- ✅ Pipes entre procesos (`|`).
-- ✅ Soporte para Ctrl+D (EOF).
-- ✅ Soporte para Ctrl+C (mata proceso en foreground).
-
-#### Comandos Implementados
-
-Todos los comandos se ejecutan como **procesos de usuario separados** mediante `sys_create_process_ex()`, permitiendo ejecución aislada y compatibilidad con pipes:
-
-- ✅ Ejecución en background (con `&`).
-- ✅ Compatibilidad con pipes.
-- ✅ Lectura desde stdin y escritura a stdout.
-
-**Comandos disponibles:**
-
-1. **`help`**: Muestra ayuda sobre todos los comandos disponibles.
-
-2. **`mem [-v]`**: Muestra estadísticas de memoria:
-   ```bash
-   mem              # Estadísticas básicas
-   mem -v           # Estadísticas detalladas (verbose)
-   ```
-   Muestra: heap total, usado, libre, bloques libres, fragmentación, etc.
-
-3. **`ps`**: Lista todos los procesos con información detallada:
-   - PID, prioridad, estado, ticks restantes, foreground/background
-   - Stack pointer, base pointer, nombre del proceso
-
-4. **`loop [-p priority]`**: Proceso de test que hace loop infinito:
-   ```bash
-   loop             # Loop con prioridad por defecto
-   loop -p 1        # Loop con prioridad 1 (alta)
-   ```
-
-5. **`kill <pid>`**: Mata un proceso:
-   ```bash
-   kill 5
-   ```
-
-6. **`nice <pid> <priority>`**: Cambia prioridad de un proceso:
-   ```bash
-   nice 5 3    # Cambiar PID 5 a prioridad 3
-   ```
-
-7. **`block <pid>`**: Bloquea un proceso.
-
-8. **`cat`**: Lee desde stdin y escribe a stdout.
-   ```bash
-   cat
-   echo "hola" | cat    # Lee desde pipe
-   ```
-
-9. **`wc`**: Cuenta líneas desde stdin.
-   ```bash
-   echo "linea1\nlinea2" | wc    # Salida: 2
-   ```
-
-10. **`filter`**: Elimina vocales desde stdin.
-    ```bash
-    echo "hola mundo" | filter    # Salida: "hl mnd"
-    ```
-
-11. **`mvar <writers> <readers>`**: Implementa el problema de múltiples lectores y escritores sobre una variable global.
-    - Simula el comportamiento de un MVar (variable compartida) de Haskell
-    - Cada escritor escribe un valor único ('A', 'B', 'C', etc.) después de esperar aleatoriamente
-    - Cada lector consume y muestra el valor con un identificador único (color)
-    - Garantiza sincronización correcta usando semáforos
-    - El proceso principal termina inmediatamente después de crear lectores y escritores
-    ```bash
-    mvar 2 2     # 2 escritores, 2 lectores → Salida: ABABABABA
-    mvar 3 2     # 3 escritores, 2 lectores → Salida: ABCABCABC
-    mvar 2 3     # 2 escritores, 3 lectores → Salida: ABABABABA
-    ```
-
-    **Casos de uso avanzados:**
-    - Matar un escritor durante ejecución muestra comportamiento asimétrico
-    - Cambiar prioridad de un escritor afecta la frecuencia de sus escrituras
-    - Matar un lector muestra acumulación de valores sin consumir
-
-12. **`test_mm [bytes]`**: Test del gestor de memoria.
-    ```bash
-    test_mm              # Default: 100000000 bytes
-    test_mm 50000000     # 50MB
-    ```
-
-13. **`test_processes [n]`**: Test de gestión de procesos.
-    ```bash
-    test_processes       # Default: 10 procesos
-    test_processes 20    # 20 procesos
-    ```
-
-14. **`test_priority [n]`**: Demostración de scheduling.
-    ```bash
-    test_priority        # Default: 5 procesos
-    test_priority 10     # 10 procesos
-    ```
-
-15. **`test_no_synchro [n]`**: Test sin sincronización (race condition).
-    ```bash
-    test_no_synchro 5
-    ```
-
-16. **`test_synchro [n] [use_sem]`**: Test sincronizado con semáforos.
-    ```bash
-    test_synchro 5           # Con semáforos (default)
-    test_synchro 5 1         # Con semáforos (explícito)
-    test_synchro 5 0         # Sin semáforos
-    ```
-
-## ⌨️ Caracteres Especiales y Atajos
-
-### Pipes (`|`)
-
-Conecta la salida de un comando a la entrada de otro:
-
-```bash
-echo "hola mundo" | wc           # Cuenta líneas
-echo "abracadabra" | filter      # Elimina vocales
-echo "test" | cat | wc           # Chain de pipes
-```
-
-**Limitación actual:** La shell soporta pipes simples de dos comandos. Pipes múltiples pueden requerir expansión futura.
-
-### Background (`&`)
-
-Ejecuta un comando en background (no bloquea la shell):
-
-```bash
-loop -p 3 &              # Loop en background
-test_mm 50000000 &       # Test de memoria en background
-```
-
-Cuando un comando termina en background, la shell continúa aceptando nuevos comandos inmediatamente.
-
-### Ctrl+C (Interrupción)
-
-- **Comportamiento**: Mata el proceso que tiene control del foreground.
-- **Implementación**: Envía señal SIGINT al proceso foreground actual.
-- **Uso**: Útil para terminar procesos que se quedaron en loop o bloquearon.
-
-**Ejemplo:**
-```bash
-loop -p 1           # Proceso en foreground
-# Presionar Ctrl+C mata el loop
-```
-
-### Ctrl+D (EOF)
-
-- **Comportamiento**: Envía End-of-File (EOF) a la entrada estándar.
-- **Implementación**: Marca la TTY como EOF y desbloquea procesos esperando leer.
-- **Uso**: Útil para terminar entrada interactiva en comandos como `cat`.
-
-**Ejemplo:**
-```bash
-cat                 # Espera entrada
-# Escribir texto...
-# Presionar Ctrl+D termina la entrada
-```
-
-## 📋 Ejemplos de Uso Reales
-
-### Ejemplo 1: Testing de Memoria
-
-```bash
-# Compilar con Buddy System
-make buddy
-
-# Ejecutar test de memoria en foreground
+# Test de memoria en foreground
 test_mm 50000000
 
-# Ejecutar en background
+# Test en background + consultar stats
 test_mm 100000000 &
-
-# Consultar estadísticas mientras corre
 mem -v
 ```
 
-### Ejemplo 2: Testing de Procesos y Prioridades
-
+#### Ejemplo 2: Scheduling y Prioridades
 ```bash
-# Crear loops con diferentes prioridades
-loop -p 1 &    # Alta prioridad
-loop -p 3 &    # Baja prioridad
+# Crear procesos con diferentes prioridades
+loop -p 1 &
+loop -p 3 &
 
 # Ver procesos
 ps
 
 # Cambiar prioridad
-nice 5 1      # Cambiar PID 5 a prioridad 1
+nice 5 0
 
-# Matar procesos
+# Limpiar
 kill 5
 kill 6
 ```
 
-### Ejemplo 3: Testing de Sincronización
-
+#### Ejemplo 3: Sincronización
 ```bash
-# Test sin sincronización (resultado variable)
-test_no_synchro 10 &
+# Demostrar race condition
+test_no_synchro 10
 
-# Test con sincronización (resultado siempre 0)
-test_synchro 10 &
+# Demostrar corrección con semáforos
+test_synchro 10
 
-# Verificar con ps que los procesos estén bloqueándose correctamente
-ps
+# Ver diferencia en resultados finales
 ```
 
-### Ejemplo 4: Uso de Pipes
-
+#### Ejemplo 4: Pipes
 ```bash
-# Pipeline simple
-echo "hola mundo" | wc
+# Filtrar salida de comandos
+ps | filter
+help | wc
+mem | wc
 
-# Pipeline con filter
-echo "abracadabra" | filter
-
-# Pipeline complejo (requiere expansión futura)
-# echo "test" | cat | wc
+# Procesar entrada del usuario
+cat | filter
 ```
 
-### Ejemplo 5: Workflow Completo
-
+#### Ejemplo 5: Lectores/Escritores
 ```bash
-# 1. Ver procesos
+# Ejecutar mvar
+mvar 3 2 &
+
+# Ver procesos creados
 ps
 
-# 2. Crear proceso de test
-loop -p 2 &
+# Cambiar prioridad de un escritor
+nice <pid> 4
 
-# 3. Consultar memoria
-mem
-
-# 4. Ver procesos actualizados
-ps
-
-# 5. Cambiar prioridad
-nice <pid> 1
-
-# 6. Matar proceso
+# Matar un lector para ver acumulación
 kill <pid>
 ```
 
-## � Pipes - Compatibilidad y Funcionamiento
+---
 
-### Funcionamiento Interno de Pipes
+## Requerimientos Faltantes o Parcialmente Implementados
 
-El sistema de pipes está implementado utilizando **file descriptors** y **syscalls genéricas** (`sys_write_fd`, `sys_read_fd`) que manejan transparentemente la escritura tanto a TTY como a pipes.
+**Ninguno.** Todos los requisitos obligatorios del enunciado están completamente implementados:
 
-Para que un comando funcione correctamente con pipes, **debe usar las syscalls de escritura genéricas** que respetan file descriptors, en lugar de las syscalls legacy que escriben directamente a video.
-
-#### ✅ Syscalls compatibles con pipes:
-- `sys_write_fd(fd, buffer, size)` - Syscall 42: Escritura genérica por file descriptor
-- `sys_read_fd(fd, buffer, size)` - Syscall 41: Lectura genérica por file descriptor
-- `printf()`, `puts()`, `putchar()` - Internamente usan `sys_write_fd`
-
-#### ❌ Syscalls NO compatibles con pipes:
-- `sys_write(fd, char)` - Syscall 1: Escritura legacy de un solo carácter directo a TTY
-- `sys_writeColor(fd, char, color)` - Syscall 17: Escritura con color directo a TTY
-- `printc()`, `prints()`, `printsColor()`, `printcColor()` - Usan syscalls legacy
-
-### Comandos que Funcionan con Pipes
-
-Los siguientes comandos fueron modificados para usar `printf()` y son **completamente compatibles** con pipes:
-
-#### ✅ Comandos Finitos (Funcionan Perfectamente)
-
-| Comando | Ejemplo | Descripción |
-|---------|---------|-------------|
-| `ps` | `ps \| filter` | Lista procesos sin vocales |
-| `ps` | `ps \| wc` | Cuenta líneas de procesos |
-| `help` / `ls` | `help \| wc` | Cuenta líneas del help |
-| `help` / `ls` | `ls \| filter` | Help sin vocales |
-| `mem` | `mem \| wc` | Cuenta líneas de estadísticas |
-| `mem` | `mem -v \| filter` | Stats verbose sin vocales |
-| `echo` | `echo "hola mundo" \| wc` | Cuenta líneas de echo |
-| `echo` | `echo abracadabra \| filter` | Echo sin vocales |
-| `cat` | `cat \| filter` | Input del usuario sin vocales |
-| `cat` | `cat \| wc` | Cuenta líneas de input |
-
-**Ejemplos de uso:**
-```bash
-# Listar procesos sin vocales
-ps | filter
-
-# Contar líneas de ayuda
-help | wc
-
-# Ver memoria sin vocales  
-mem | filter
-
-# Pipeline completo
-echo "hello world" | filter | cat
-```
-
-### Comandos con Limitaciones en Pipes
-
-#### ⚠️ Procesos Infinitos
-
-Los siguientes comandos **no funcionan bien con pipes** porque son procesos infinitos o de larga duración que no terminan naturalmente:
-
-| Comando | Problema | Razón Técnica |
-|---------|----------|---------------|
-| `mvar <w> <r>` | Se cuelga / Imprime con colores | Usa `printcColor()` (syscall legacy) + loop infinito |
-| `test_mm [size]` | Se cuelga | Proceso infinito que no termina |
-| `loop [-p prio]` | Se cuelga | Loop infinito por diseño |
-| `test_processes [n]` | Puede colgarse | Crea procesos hijos que pueden no terminar |
-
-**Razón del problema:** 
-1. Los procesos infinitos nunca terminan, por lo que el pipe nunca se cierra
-2. El comando del lado derecho del pipe (`filter`, `wc`) espera EOF (fin de archivo) que nunca llega
-3. Algunos usan `printcColor()` que escribe con syscalls legacy que no pasan por el sistema de file descriptors
-
-**Solución técnica (no implementada):**
-Para soportar procesos infinitos con pipes se necesitaría:
-- Implementar señales (SIGPIPE, SIGINT) para interrumpir procesos
-- Hacer que `filter`/`wc` procesen línea por línea sin esperar EOF
-- Convertir todos los `printcColor` a `printf` (perdiendo colores)
-
-#### ✅ Tests Finitos (Funcionan si Terminan Rápido)
-
-Estos tests **funcionan con pipes** si se ejecutan con parámetros pequeños para que terminen rápido:
-
-```bash
-# Funciona - test corto
-test_priority 3 | wc
-
-# Funciona - test corto
-test_synchro 5 | wc
-
-# Puede funcionar
-test_no_synchro 3 | filter
-```
-
-### Implementación Técnica
-
-La compatibilidad con pipes se logró mediante:
-
-1. **Modificación de `printf()`** en `stdio.c`:
-   ```c
-   // ANTES: Escribía char por char con syscall legacy
-   for (int i = 0; i < len; i++) {
-       sys_write(1, buffer[i]);  // ❌ Syscall 1 - no respeta pipes
-   }
-   
-   // AHORA: Escribe buffer completo con FD genérico
-   sys_write_fd(1, buffer, len);  // ✅ Syscall 42 - respeta pipes
-   ```
-
-2. **Implementación de `puts()` y `putchar()`**:
-   ```c
-   int puts(const char *str) {
-       int len = strlen(str);
-       sys_write_fd(1, str, len);      // Escribe string
-       sys_write_fd(1, "\n", 1);       // Escribe newline
-       return len + 1;
-   }
-   ```
-
-3. **Conversión de comandos críticos**:
-   - `cmd_ps()`: De `prints()`/`printsColor()` → `printf()`
-   - `printHelp()`: De `printsColor()` → `printf()`
-   - `cmd_mvar()`: Mensajes de error de `printsColor()` → `printf()`
-
-4. **File Descriptors en el Kernel**:
-   - Cada proceso tiene tabla de FDs (`fd_table`)
-   - `sys_dup2()` redirige stdout (FD 1) a pipe
-   - `sys_write_fd()` detecta automáticamente si escribe a TTY o pipe
-
-### Colores en Pipes
-
-**Nota importante:** Los colores **no se preservan** en pipes. Los comandos que usan `printsColor()` pierden el formato de color cuando su salida va a un pipe, pero el texto se transmite correctamente.
-
-Esto es una limitación de diseño intencionada para mantener la compatibilidad:
-- Pipes transportan texto plano
-- Los colores son específicos del terminal de video
-- Preservar colores requeriría códigos ANSI o protocolo custom
-
-## �🚧 Limitaciones
-
-- La shell soporta pipes simples de dos comandos. Pipes múltiples (ej: `p1 | p2 | p3`) no están implementados.
-- Los procesos infinitos (`loop`, `mvar`, `test_mm`) no funcionan bien con pipes debido a que nunca envían EOF.
-- Los colores no se preservan al usar pipes - la salida es siempre texto plano.
-- Algunos mensajes de error de la shell usan `printsColor` por compatibilidad visual en uso normal.
-
-## ✅ Estado de Implementación de Requisitos
-
-### Requisitos Obligatorios Completados
-
-Todos los requisitos obligatorios del enunciado han sido implementados exitosamente:
-
-**Gestión de Memoria Física:**
-- ✅ First Fit con soporte para liberación de memoria
-- ✅ Buddy System completamente funcional
-- ✅ Selección en tiempo de compilación (`make all` vs `make buddy`)
-- ✅ Interfaz común para ambos gestores
-- ✅ Test test_mm ejecutándose correctamente en foreground y background
-
-**Procesos, Context Switching y Scheduling:**
-- ✅ Multitasking preemptivo con número variable de procesos
-- ✅ Round Robin con prioridades (0-4)
-- ✅ Aging para prevenir starvation
-- ✅ Todas las syscalls requeridas implementadas
-- ✅ Test test_processes ejecutándose correctamente en foreground y background
-- ✅ Test test_priority funcionando correctamente
-
-**Sincronización:**
-- ✅ Semáforos nominales sin busy waiting
-- ✅ Compartibles entre procesos no relacionados por nombre
-- ✅ Operaciones atómicas con spinlocks
-- ✅ Libre de deadlocks y race conditions
-- ✅ Test test_synchro y test_no_synchro ejecutándose correctamente en foreground y background
-
-**Inter-Process Communication:**
-- ✅ Pipes unidireccionales con operaciones bloqueantes
-- ✅ Lectura/escritura transparente desde pipes o terminal
-- ✅ Compartibles entre procesos por identificador
-
-**Drivers:**
-- ✅ Driver de teclado funcional con soporte para teclas especiales
-- ✅ Driver de video en modo texto
-- ✅ System calls apropiadas para aislamiento kernel/userspace
-
-**Aplicaciones de Usuario:**
-- ✅ Shell (sh) con soporte para foreground/background, pipes, Ctrl+C y Ctrl+D
-- ✅ Todos los comandos requeridos implementados: help, mem, ps, loop, kill, nice, block, cat, wc, filter, mvar
-- ✅ Todos los tests ejecutándose como procesos de usuario (no built-ins)
-
-### Requisitos Faltantes o Parcialmente Implementados
-
-**Ninguno.** Todos los requisitos obligatorios del enunciado están completamente implementados y funcionales.
-
-### Mejoras Adicionales Implementadas
-
-El proyecto incluye funcionalidades adicionales no requeridas:
-
-- Sistema de wait/waitpid para sincronización padre-hijo
-- Manejo de procesos zombie y órfanos
-- Proceso idle que ejecuta `hlt` para ahorro de energía
-- Gestión avanzada de file descriptors
-- Driver de sonido (beep)
-- Comando `time` para consultar fecha/hora
-- Estadísticas detalladas de memoria con opción verbose
-
-## 🤖 Uso de Inteligencia Artificial
-
-Durante el desarrollo de este proyecto se utilizaron herramientas de inteligencia artificial de forma complementaria para consultas puntuales y asistencia en la documentación. El diseño, la arquitectura y la implementación principal del sistema fueron desarrollados por el equipo de trabajo.
+- Gestión de memoria (First Fit y Buddy System)
+- Procesos y scheduling con prioridades
+- Semáforos sin busy waiting
+- Pipes unidireccionales bloqueantes
+- Todos los tests funcionando en foreground y background
+- Shell con pipes, background, Ctrl+C y Ctrl+D
+- Todos los comandos implementados como procesos de usuario
 
 ---
 
-## ✓ Checklist de Evaluación - Requisitos Obligatorios
+## Limitaciones
 
-### Tests Requeridos (Criterio de Aprobación)
+### Pipes
+- **Pipes múltiples**: La shell soporta pipes simples (`cmd1 | cmd2`). Cadenas largas (`cmd1 | cmd2 | cmd3`) requieren implementación.
+- **Procesos infinitos con pipes**: Comandos como `loop`, `mvar` y `test_mm` no funcionan bien con pipes porque nunca terminan ni envían EOF, es decir, no anda bien si hacemos loop | filter.
+- **Colores**: Los colores no se preservan en pipes - la salida es texto plano.
 
-| Test | Estado | Ubicación | Ejecuta como User Process | Foreground | Background |
-|------|--------|-----------|---------------------------|------------|------------|
-| test_mm | ✅ | [test_mm.c](Userland/SampleCodeModule/tests/test_mm.c) | ✅ | ✅ | ✅ |
-| test_processes | ✅ | [test_processes.c](Userland/SampleCodeModule/tests/test_processes.c) | ✅ | ✅ | ✅ |
-| test_synchro | ✅ | [test_sync.c](Userland/SampleCodeModule/tests/test_sync.c) | ✅ | ✅ | ✅ |
-| test_no_synchro | ✅ | [test_sync.c](Userland/SampleCodeModule/tests/test_sync.c) | ✅ | ✅ | ✅ |
-
-### Memory Managers
-
-| Manager | Estado | Archivo | Comando Compilación |
-|---------|--------|---------|---------------------|
-| First Fit | ✅ | [first_fit.c](Kernel/mm/first_fit.c) | `make clean all` |
-| Buddy System | ✅ | [buddy_system.c](Kernel/mm/buddy_system.c) | `make buddy` |
-| Interfaz común | ✅ | [memory_manager.c](Kernel/mm/memory_manager.c) | Transparente |
-
-### System Calls - Gestión de Memoria
-
-- ✅ `sys_malloc()` / `sys_alloc()` - Asignar memoria
-- ✅ `sys_free()` - Liberar memoria
-- ✅ `sys_mem_info()` - Consultar estado de memoria
-- ✅ `sys_mm_get_stats()` - Estadísticas detalladas
-
-### System Calls - Procesos
-
-- ✅ `sys_create_process()` - Crear proceso con parámetros
-- ✅ `sys_exit()` - Terminar proceso
-- ✅ `sys_getpid()` - Obtener PID
-- ✅ `sys_proc_snapshot()` - Listar procesos (ps)
-- ✅ `sys_kill()` - Matar proceso arbitrario
-- ✅ `sys_nice()` - Modificar prioridad
-- ✅ `sys_block()` / `sys_unblock()` - Bloquear/desbloquear
-- ✅ `sys_yield()` - Ceder CPU
-- ✅ `sys_wait_pid()` - Esperar hijos
-
-### System Calls - Sincronización
-
-- ✅ `sys_sem_open()` - Abrir/crear semáforo por nombre
-- ✅ `sys_sem_wait()` - Operación down (sin busy waiting)
-- ✅ `sys_sem_post()` - Operación up
-- ✅ `sys_sem_close()` - Cerrar semáforo
-- ✅ `sys_sem_unlink()` - Eliminar semáforo
-
-### System Calls - IPC
-
-- ✅ `sys_pipe_open()` - Crear/abrir pipe por nombre
-- ✅ `sys_pipe_read()` - Lectura bloqueante
-- ✅ `sys_pipe_write()` - Escritura bloqueante
-- ✅ Transparencia pipe/terminal para procesos
-
-### Aplicaciones de Usuario (Todas como User Processes)
-
-| Comando | Implementado | Descripción |
-|---------|--------------|-------------|
-| sh | ✅ | Shell con fg/bg, pipes, Ctrl+C, Ctrl+D |
-| help | ✅ | Lista de comandos |
-| mem | ✅ | Estado de memoria |
-| ps | ✅ | Lista de procesos |
-| loop | ✅ | Loop con prioridad configurable |
-| kill | ✅ | Matar proceso por PID |
-| nice | ✅ | Cambiar prioridad |
-| block | ✅ | Bloquear proceso |
-| cat | ✅ | Echo de stdin |
-| wc | ✅ | Contador de líneas |
-| filter | ✅ | Filtro de vocales |
-| mvar | ✅ | Problema lectores/escritores |
-
-### Requisitos Generales
-
-- ✅ Comunicación kernel-user solo por system calls
-- ✅ Libre de deadlocks y race conditions
-- ✅ Sin busy waiting en semáforos/pipes
-- ✅ Makefile para compilación
-- ✅ Control de versiones desde inicio del desarrollo
-- ✅ Sin binarios en repositorio
-- ✅ Compilación con `-Wall` sin warnings en código propio
-- ✅ Imagen Docker: `agodio/itba-so-multi-platform:3.0`
-
-### README - Contenido Obligatorio
-
-- ✅ Instrucciones de compilación y ejecución
-- ✅ Nombre y descripción de cada comando/test con parámetros
-- ✅ Caracteres especiales (pipes `|`, background `&`)
-- ✅ Atajos de teclado (Ctrl+C, Ctrl+D)
-- ✅ Ejemplos de uso fuera de tests
-- ✅ Requisitos faltantes o parcialmente implementados (ninguno)
-- ✅ Limitaciones
-- ✅ Citas de código / uso de IA
+### Sistema
+- **Señales**: No hay implementación completa de señales (solo Ctrl+C básico).
 
 ---
 
-**Resultado:** ✅ **Todos los requisitos obligatorios cumplidos**
-.
+## Uso de Inteligencia Artificial
+
+Durante el desarrollo se utilizó IA (GitHub Copilot y Codex) para:
+- Consultas puntuales sobre sintaxis de x86-64 assembly
+- Asistencia en la redacción de documentación
+- Debugging de race conditions específicas
+
+---
+
+**Desarrollado sobre x64BareBones** | Compilación obligatoria con Docker `agodio/itba-so-multi-platform:3.0`
