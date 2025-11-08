@@ -48,17 +48,39 @@ void ps_main(int argc, char **argv) {
 	for (int i = 0; i < count; i++) {
 		const char *state = state_to_string(info[i].state);
 		const char *fg = info[i].fg ? "FG" : "BG";
-		printf("%-5d %-4d %-6s %-5d %-2s ",
-			   info[i].pid,
-			   info[i].priority,
-			   state,
-			   info[i].ticks_left,
-			   fg);
+		
+		// Print PID (width 5, left aligned)
+		printf("%d", info[i].pid);
+		int pid_len = (info[i].pid < 10) ? 1 : (info[i].pid < 100) ? 2 : (info[i].pid < 1000) ? 3 : (info[i].pid < 10000) ? 4 : 5;
+		for (int j = pid_len; j < 6; j++) printf(" ");
+		
+		// Print Priority (width 4, left aligned)
+		printf("%d", info[i].priority);
+		int prio_len = (info[i].priority < 10) ? 1 : (info[i].priority < 100) ? 2 : (info[i].priority < 1000) ? 3 : 4;
+		for (int j = prio_len; j < 5; j++) printf(" ");
+		
+		// Print State (width 6, left aligned)
+		printf("%s", state);
+		int state_len = 0;
+		while (state[state_len]) state_len++;
+		for (int j = state_len; j < 7; j++) printf(" ");
+		
+		// Print Ticks (width 5, left aligned)
+		printf("%d", info[i].ticks_left);
+		int ticks_len = (info[i].ticks_left < 10) ? 1 : (info[i].ticks_left < 100) ? 2 : (info[i].ticks_left < 1000) ? 3 : (info[i].ticks_left < 10000) ? 4 : 5;
+		for (int j = ticks_len; j < 6; j++) printf(" ");
+		
+		// Print FG/BG (width 2, left aligned)
+		printf("%s", fg);
+		for (int j = 2; j < 10; j++) printf(" ");
+		
+		// Print SP and BP
 		print_hex64(info[i].sp);
 		printf(" ");
 		print_hex64(info[i].bp);
-		// Ensure name is null-terminated and print it
-		printf(" %-16s\n", info[i].name[0] ? info[i].name : "(no name)");
+		
+		// Print Name
+		printf(" %s\n", info[i].name[0] ? info[i].name : "(no name)");
 	}
 	printf("\n");  // Extra newline for readability
 
