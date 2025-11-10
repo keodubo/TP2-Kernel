@@ -14,7 +14,7 @@ void * memset(void * destination, int32_t c, uint64_t length)
 
 void * memcpy(void * destination, const void * source, uint64_t length)
 {
-	*/
+	
 	uint64_t i;
 
 	if ((uint64_t)destination % sizeof(uint32_t) == 0 &&
