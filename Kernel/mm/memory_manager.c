@@ -4,10 +4,6 @@
 #include "naiveConsole.h"
 #include <lib.h>
 
-// Wrapper que selecciona el memory manager en tiempo de compilacion
-// Por defecto usa First Fit, con "make buddy" usa Buddy System
-// Solo UN algoritmo puede estar activo a la vez
-
 #ifdef USE_BUDDY_SYSTEM
     // Usar Buddy System
 #else

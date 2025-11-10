@@ -8,10 +8,6 @@
 #include "sched.h"
 #include "memory_manager.h"
 
-// Archivo: fd.c
-// Propósito: Gestor de file descriptors per-proceso con objetos compartidos
-// Resumen: Implementa files con refcount, tablas por proceso y operaciones
-//          genéricas read/write/close para TTY y pipes.
 
 static file_t *stdin_file = NULL;
 static file_t *stdout_file = NULL;

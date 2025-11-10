@@ -244,7 +244,8 @@ kill <pid>
 Durante el desarrollo se utilizó IA (GitHub Copilot y Codex) para:
 - Consultas puntuales sobre sintaxis de x86-64 assembly
 - Asistencia en la redacción de documentación
-- Debugging de race conditions específicas
+- Debugging de race conditions
+- Ayuda para pensar programas dificiles como mvar
 
 ---
 

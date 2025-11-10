@@ -2,10 +2,6 @@
 #include "font.h"
 #include "time.h"
 
-// Archivo: videoDriver.c
-// Propósito: Driver gráfico simple para dibujar texto y primitivas en modo VBE
-// Resumen: Proporciona funciones para dibujar caracteres usando una fuente
-//          bitmap, pintar rectángulos, manejo del framebuffer y scroll.
 
 Color WHITE = {255,255,255};
 Color BLACK = {0,0,0};

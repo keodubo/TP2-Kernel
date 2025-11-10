@@ -1,44 +1,6 @@
 #include "sched.h"
 #include "naiveConsole.h"
 
-/**
- * Scheduler del Kernel - Round Robin con Prioridades y Aging
- *
- * Este módulo implementa el planificador de procesos del sistema operativo.
- * Utiliza un algoritmo de Round Robin multinivel con aging para evitar
- * starvation de procesos de baja prioridad.
- *
- * Algoritmo de Scheduling:
- * -------------------------
- * - Prioridades: 0 (más alta) a 4 (más baja), definidas en MIN_PRIO y HIGHEST_PRIO
- * - Round Robin: Cada proceso recibe un quantum (TIME_SLICE_TICKS)
- * - Preemptive: Un proceso puede ser interrumpido al agotar su quantum
- * - Colas FIFO por prioridad: Procesos del mismo nivel ejecutan en orden
- *
- * Mecanismo de Aging:
- * -------------------
- * Para evitar starvation (inanición), los procesos que esperan mucho tiempo
- * en colas de baja prioridad son promovidos temporalmente:
- *
- * 1. Cada tick, se incrementa aging_ticks para procesos en READY
- * 2. Cuando aging_ticks >= AGING_THRESHOLD (10 ticks):
- *    - El proceso se promueve temporalmente a la siguiente prioridad más alta
- *    - Se resetea aging_ticks a 0
- * 3. Al terminar su quantum, el proceso vuelve a su prioridad base
- *
- * Proceso Idle:
- * -------------
- * - PID especial que ejecuta solo cuando no hay otros procesos READY
- * - Ejecuta _hlt() para ahorrar CPU
- * - Prioridad MIN_PRIO, nunca está en las colas normales
- *
- * Estructuras de datos:
- * ---------------------
- * - ready_head[]/ready_tail[]: Colas FIFO por nivel de prioridad
- * - current: Proceso actualmente en ejecución
- * - idle_proc: Proceso idle especial
- */
-
 // Colas FIFO de procesos READY, una por cada nivel de prioridad
 static pcb_t *ready_head[MAX_PRIOS];
 static pcb_t *ready_tail[MAX_PRIOS];

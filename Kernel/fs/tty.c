@@ -10,12 +10,6 @@
 
 #define TTY_BUFFER_CAP 256
 
-// Archivo: tty.c
-// Propósito: Implementación de la TTY principal del sistema
-// Resumen: Buffer circular, colas de procesos bloqueados por lectura y
-//          API para lectura/escritura de la consola por procesos.
-
-// Nodo de la cola de espera para lectores del teclado
 typedef struct tty_waiter {
     pcb_t *proc;
     struct tty_waiter *next;

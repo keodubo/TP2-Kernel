@@ -15,10 +15,6 @@
 
 // Forward declaration del PIPE_OPS definido en pipe_fd.c
 extern const struct fd_ops PIPE_OPS;
-// Archivo: syscalls.c
-// Propósito: Implementación de llamadas al sistema (syscalls)
-// Resumen: Funciones que implementan la interfaz de syscalls disponibles
-//          para userland (getpid, yield, exit, blocking, etc.).
 
 uint64_t sys_getpid(void) {
     pcb_t *cur = sched_current();

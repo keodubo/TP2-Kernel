@@ -8,13 +8,6 @@
 #include <syscalls.h>
 #include <tty.h>
 
-// Puente entre interrupciones de software y las funciones del kernel
-
-// Archivo: sysCallDispatcher.c
-// Propósito: Dispatcher de syscalls invocadas por interrupción de software
-// Resumen: Traduce números de syscall a funciones internas del kernel, maneja
-//          argumentos y adaptaciones entre userland y servicios kernel.
-
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2

@@ -3,31 +3,7 @@
 #include "interrupts.h"
 #include "lib.h"
 
-/**
- * Implementación de Semáforos Nominales (Named Semaphores)
- *
- * Este módulo provee semáforos estilo POSIX que pueden ser compartidos entre
- * procesos no relacionados mediante nombres (strings).
- *
- * Características principales:
- * - Semáforos nominales: accesibles por nombre desde cualquier proceso
- * - Sincronización sin busy-wait: los procesos se bloquean realmente
- * - Cola FIFO: los procesos despiertan en orden de llegada
- * - Conteo de referencias: semáforos se destruyen automáticamente cuando no hay usuarios
- * - Thread-safe: usa spinlocks para proteger estructuras críticas
- *
- * Estructura de datos:
- * - Hash table: para búsqueda rápida por nombre (KSEM_HASH_BUCKETS buckets)
- * - Wait queue: cola FIFO de procesos esperando en cada semáforo
- * - Referencia counting: cada proceso que abre un semáforo incrementa refcount
- *
- * Operaciones principales:
- * - ksem_open(): Abre/crea semáforo por nombre con valor inicial
- * - ksem_wait(): Decrementa contador o bloquea si es 0 (operación P/down)
- * - ksem_post(): Incrementa contador o despierta un proceso (operación V/up)
- * - ksem_close(): Cierra handle y decrementa refcount
- * - ksem_unlink(): Marca para destrucción cuando refcount llegue a 0
- */
+
 
 #define SEM_HANDLE_MAX 128  // Máximo de handles de semáforos por proceso
 

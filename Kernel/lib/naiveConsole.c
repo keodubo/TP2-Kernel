@@ -1,11 +1,5 @@
 #include <naiveConsole.h>
 
-// Archivo: naiveConsole.c
-// Propósito: Implementaciones básicas de impresión en la consola "naive" (modo texto)
-// Resumen: Funciones para imprimir cadenas, números en distintas bases, limpiar
-//          la pantalla y manejo básico del cursor usando el buffer de video en 0xB8000.
-
-
 static uint32_t uintToBase(uint64_t value, char * buffer, uint32_t base);
 
 static char buffer[64] = { '0' };

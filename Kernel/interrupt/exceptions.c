@@ -2,10 +2,6 @@
 #include "videoDriver.h"
 #include "time.h"
 
-// Archivo: exceptions.c
-// Propósito: Manejar excepciones de CPU y mostrar información de registro
-// Resumen: Detecta excepciones como división por cero o opcode inválido y
-//          muestra dump de registros en pantalla para depuración.
 
 
 #define ZERO_ID 0

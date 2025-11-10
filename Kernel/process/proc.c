@@ -7,28 +7,6 @@
 #include "syscalls.h"
 #include "naiveConsole.h"
 
-/**
- * Gestión de Procesos (PCB - Process Control Block)
- *
- * Este módulo implementa la tabla de procesos del kernel, proporcionando
- * funcionalidades completas para el ciclo de vida de los procesos.
- *
- * Características principales:
- * - Creación y destrucción de procesos con asignación dinámica de recursos
- * - Manejo de relaciones padre-hijo y órfanos
- * - Sistema de zombies para preservar códigos de salida
- * - Mecanismo wait/waitpid para sincronización entre procesos
- * - Gestión de stacks de kernel y configuración para context switch
- *
- * Ciclo de vida de un proceso:
- * 1. NEW: Proceso creado pero aún no agregado al scheduler
- * 2. READY: En cola del scheduler, listo para ejecutar
- * 3. RUNNING: Actualmente en ejecución
- * 4. BLOCKED: Bloqueado esperando un evento (semáforo, pipe, etc.)
- * 5. ZOMBIE: Terminado pero con código de salida preservado para el padre
- * 6. UNUSED: Slot liberado y disponible para reuso
- */
-
 #define KSTACK_SIZE (16 * 1024)  // Tamaño del stack del kernel por proceso
 
 // Tabla estática de procesos (MAX_PROCS slots)
@@ -44,18 +22,6 @@ static pcb_t *zombie_head = NULL;
 // Contador global para asignar PIDs únicos
 static int next_pid = 1;
 
-/**
- * Estructura para almacenar resultados de procesos hijos que terminaron.
- *
- * Cuando un hijo termina y el padre no está esperando activamente (no está
- * bloqueado en wait), se crea un wait_result y se encola en el padre. Esto
- * permite que waitpid retorne inmediatamente si el hijo ya terminó.
- *
- * Caso de uso:
- * - Proceso hijo termina antes de que el padre llame a waitpid
- * - Se guarda el PID y código de salida en wait_result
- * - Cuando el padre llama waitpid, encuentra el resultado inmediatamente
- */
 typedef struct wait_result {
     int child_pid;    // PID del hijo que terminó
     int exit_code;    // Código de salida del hijo
