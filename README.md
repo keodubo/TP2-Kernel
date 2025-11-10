@@ -66,9 +66,9 @@ Todos los comandos se ejecutan como procesos independientes, soportan pipes (`|`
 
 - **`nice <pid> <priority>`**: Cambia prioridad de proceso (0-3).
 
-- **`block <pid>`**: Bloquea proceso.
-
-- **`unblock <pid>`**: Desbloquea proceso.
+- **`block <pid>`**: Es un toggle para bloquear/desbloquear el proceso.
+    o sea si hacemos block [pid] se bloquea, luego para desbloquear hay que hacer
+    block[pid] y se desbloquea
 
 - **`yield`**: Cede CPU voluntariamente.
 
@@ -114,9 +114,10 @@ Todos los comandos se ejecutan como procesos independientes, soportan pipes (`|`
   - Parámetro 1: cantidad de escritores
   - Parámetro 2: cantidad de lectores
   - Simula MVar de Haskell con sincronización
-  - Escritores escriben caracteres ('A', 'B', 'C'...) con delay aleatorio
-  - Lectores consumen y muestran valores con identificador de color
+  - Escritores escriben caracteres ('A', 'B', 'C'...) con delay aleatorio, maximo 26
+  - Lectores consumen y muestran valores con identificador de color, maximo 14
   - Ejemplo: `mvar 2 3` → 2 escritores, 3 lectores
+  - Corre por defecto en bg, no hace falta poner & al final del comando, de esta manera podemos hacer block [pid] o kill [pid] de una pra probar su funcionamiento
 
 ### Caracteres Especiales
 
