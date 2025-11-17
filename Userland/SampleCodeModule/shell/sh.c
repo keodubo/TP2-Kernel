@@ -33,6 +33,7 @@ void nice_main(int argc, char **argv);
 void kill_main(int argc, char **argv);
 void block_main(int argc, char **argv);
 void mem_main(int argc, char **argv);
+void phylo_main(int argc, char **argv);
 
 #define SHELL_STDIN 0
 #define SHELL_STDOUT 1
@@ -403,6 +404,12 @@ static void filter_process(int argc, char **argv) {
 	sys_exit(0);
 }
 
+static void phylo_process(int argc, char **argv) {
+	DBG_MSG("phylo_process wrapper start");
+	phylo_main(argc, argv);
+	sys_exit(0);
+}
+
 // initialize all to 0
 char line[MAX_BUFF + 1] = {0};
 char parameter[MAX_BUFF + 1] = {0};
@@ -453,6 +460,7 @@ void cmd_filter(void);
 void cmd_mem(void);
 void cmd_echo(void);
 void cmd_mvar(void);
+void cmd_phylo(void);
 void printPrompt(void);
 
 extern int mem_command(int argc, char **argv);
@@ -486,6 +494,7 @@ void printHelp()
 	printf("\n>test_no_synchro [n]- run race condition without semaphores");
 	printf("\n>test_synchro [n]   - run synchronized version using semaphores");
 	printf("\n>mvar <writers> <readers> - start colored MVar demo");
+	printf("\n>phylo              - dining philosophers demo (interactive: a/r/x)");
 	printf("\n>exit               - exit KERNEL OS");
 	printf("\n\n");
 	printf("Background execution:\n");
@@ -497,7 +506,7 @@ void printHelp()
 	printf("  cat | filter           - read input and filter vowels\n\n");
 }
 
-const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "mvar"};
+const char *commands[] = {"undefined", "help", "ls", "time", "clear", "registersinfo", "zerodiv", "invopcode", "exit", "ascii", "test_mm", "test_processes", "test_priority", "test_sync", "test_no_synchro", "test_synchro", "debug", "ps", "loop", "nice", "kill", "block", "yield", "waitpid", "mem", "cat", "wc", "filter", "echo", "mvar", "phylo"};
 static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_undefined,
 	cmd_help,
@@ -528,7 +537,8 @@ static void (*commands_ptr[MAX_ARGS])() = {
 	cmd_wc,
 	cmd_filter,
 	cmd_echo,
-	cmd_mvar
+	cmd_mvar,
+	cmd_phylo
 };
 
 // Bucle principal de la shell: lee caracteres y procesa líneas completas
@@ -2045,6 +2055,20 @@ void cmd_mvar()
 	if (is_background)
 	{
 		printPrompt();
+	}
+}
+
+void cmd_phylo()
+{
+	int argc_spawn = 0;
+	char **argv_spawn = build_spawn_argv("phylo", NULL, 0, &argc_spawn);
+	if (argv_spawn == NULL) {
+		printsColor("\nphylo: failed to allocate args\n", MAX_BUFF, RED);
+		return;
+	}
+
+	if (spawn_user_command(phylo_process, argc_spawn, argv_spawn, "phylo") < 0) {
+		printsColor("\nphylo: failed to spawn process\n", MAX_BUFF, RED);
 	}
 }
 

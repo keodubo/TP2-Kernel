@@ -32,6 +32,7 @@ static void print_help_text(void) {
 	printf("\n>test_no_synchro [n]- run race condition without semaphores");
 	printf("\n>test_synchro [n]   - run synchronized version using semaphores");
 	printf("\n>mvar <writers> <readers> - start colored MVar demo");
+	printf("\n>phylo              - dining philosophers demo (interactive: a/r/x)");
 	printf("\n>exit               - exit KERNEL OS\n\n");
 	printf("Background execution:\n");
 	printf("  cmd &  - Execute command in background (no wait)\n");
