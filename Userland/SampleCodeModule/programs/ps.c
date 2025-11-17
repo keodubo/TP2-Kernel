@@ -2,6 +2,7 @@
 #include <sys_calls.h>
 #include <spawn_args.h>
 
+// Convierte el código de estado numérico a su representación en texto
 static const char *state_to_string(int state) {
 	switch (state) {
 	case 0:
@@ -19,6 +20,7 @@ static const char *state_to_string(int state) {
 	}
 }
 
+// Formatea un número de 64 bits como string hexadecimal
 static void format_hex64(uint64_t value, char out[17]) {
 	static const char *digits = "0123456789ABCDEF";
 	for (int i = 15; i >= 0; i--) {
@@ -28,23 +30,29 @@ static void format_hex64(uint64_t value, char out[17]) {
 	out[16] = '\0';
 }
 
+// Imprime un número de 64 bits en formato hexadecimal
 static void print_hex64(uint64_t value) {
 	char buf[17];
 	format_hex64(value, buf);
 	printf("0x%s", buf);
 }
 
+// Comando ps: Lista todos los procesos del sistema
+// Muestra PID, prioridad, estado, ticks, FG/BG, stack pointer, base pointer y nombre
 void ps_main(int argc, char **argv) {
 	proc_info_t info[MAX_PROCS];
 	int count = (int)sys_proc_snapshot(info, MAX_PROCS);
-	
+
 	if (count <= 0) {
 		printf("\nNo processes to show\n");
 		free_spawn_args(argv, argc);
 		sys_exit(0);
 	}
 
+	// Imprimir encabezado de la tabla
 	printf("\nPID   PRIO STATE  TICKS FG        SP                BP                NAME\n");
+
+	// Imprimir información de cada proceso con alineación correcta
 	for (int i = 0; i < count; i++) {
 		const char *state = state_to_string(info[i].state);
 		const char *fg = info[i].fg ? "FG" : "BG";

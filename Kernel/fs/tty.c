@@ -29,6 +29,7 @@ struct tty {
 static tty_t default_tty;
 static bool default_tty_initialized = false;
 
+// Guarda el estado de las interrupciones y las deshabilita
 static uint64_t irq_save_local(void) {
     uint64_t flags;
     __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
@@ -36,12 +37,14 @@ static uint64_t irq_save_local(void) {
     return flags;
 }
 
+// Restaura el estado de las interrupciones guardado anteriormente
 static void irq_restore_local(uint64_t flags) {
     if (flags & (1ULL << 9)) {
         _sti();
     }
 }
 
+// Agrega un proceso a la cola de espera del TTY
 static void enqueue_waiter(tty_t *t, pcb_t *proc, tty_waiter_t *node) {
     if (node == NULL) {
         return;
@@ -57,6 +60,7 @@ static void enqueue_waiter(tty_t *t, pcb_t *proc, tty_waiter_t *node) {
     }
 }
 
+// Remueve y retorna el primer proceso de la cola de espera del TTY
 static pcb_t *dequeue_waiter(tty_t *t) {
     if (t->wait_head == NULL) {
         return NULL;
@@ -73,7 +77,7 @@ static pcb_t *dequeue_waiter(tty_t *t) {
     return proc;
 }
 
-// Devuelve la instancia singleton de la consola
+// Devuelve la instancia única del TTY por defecto (inicializa si es necesario)
 tty_t *tty_default(void) {
     if (!default_tty_initialized) {
         memset(&default_tty, 0, sizeof(default_tty));
@@ -83,7 +87,7 @@ tty_t *tty_default(void) {
     return &default_tty;
 }
 
-// Bloqueante: consume datos del buffer o espera a que lleguen
+// Lee hasta n bytes del buffer del TTY (bloqueante si no hay datos)
 int tty_read(tty_t *t, void *buf, int n) {
     if (t == NULL || buf == NULL || n <= 0) {
         return -1;
@@ -155,7 +159,7 @@ int tty_read(tty_t *t, void *buf, int n) {
     return total;
 }
 
-// Escribe caracteres en pantalla (TTY es de salida inmediata)
+// Escribe n bytes del buffer en la pantalla
 int tty_write(tty_t *t, const void *buf, int n) {
     (void)t;
     if (buf == NULL || n <= 0) {
@@ -169,13 +173,13 @@ int tty_write(tty_t *t, const void *buf, int n) {
     return n;
 }
 
-// Cerrar la TTY no hace nada; mantiene compatibilidad con fd_ops
+// Cierra el TTY (operación vacía, solo para compatibilidad)
 int tty_close(tty_t *t) {
     (void)t;
     return 0;
 }
 
-// Encola un nuevo carácter proveniente del teclado y despierta lectores
+// Agrega un carácter al buffer del TTY y despierta procesos bloqueados
 void tty_push_char(tty_t *t, char c) {
     if (t == NULL) {
         return;
@@ -225,7 +229,7 @@ void tty_push_char(tty_t *t, char c) {
     }
 }
 
-// Entrada principal desde el driver de teclado (solo encola si es printable)
+// Maneja la entrada desde el teclado y la envía al TTY
 void tty_handle_input(uint8_t scancode, char ascii) {
     (void)scancode;
     if (ascii == 0) {
@@ -240,7 +244,7 @@ void tty_handle_input(uint8_t scancode, char ascii) {
     tty_push_char(t, ascii);
 }
 
-// Establece el proceso que tiene control de la TTY (foreground)
+// Establece qué proceso tiene control del TTY (foreground)
 void tty_set_foreground(int pid) {
     tty_t *t = tty_default();
     if (t == NULL) {
@@ -252,7 +256,7 @@ void tty_set_foreground(int pid) {
     irq_restore_local(flags);
 }
 
-// Verifica si un proceso puede leer de la TTY
+// Verifica si un proceso tiene permiso para leer del TTY
 bool tty_can_read(int pid) {
     tty_t *t = tty_default();
     if (t == NULL) {
@@ -266,7 +270,7 @@ bool tty_can_read(int pid) {
     return can_read;
 }
 
-// Obtiene el PID del proceso foreground actual
+// Obtiene el PID del proceso que tiene control del TTY
 int tty_get_foreground(void) {
     tty_t *t = tty_default();
     if (t == NULL) {

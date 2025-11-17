@@ -1,3 +1,6 @@
+// mvar.c - Implementación de MVar (Mutable Variable) con semáforos
+// Demuestra sincronización entre múltiples writers y readers
+// Los writers escriben letras y los readers las leen en colores
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -44,6 +47,7 @@ static const int reader_palette_len = (int)(sizeof(reader_palette) / sizeof(read
 static mvar_context_t contexts[MVAR_MAX_INSTANCES] = {0};
 static int next_ctx_id = 1;
 
+// Generador de números pseudoaleatorios (xorshift32)
 static uint32_t rng_step(uint32_t *state) {
     uint32_t x = *state;
     x ^= x << 13;
@@ -53,6 +57,7 @@ static uint32_t rng_step(uint32_t *state) {
     return x;
 }
 
+// Espera activa con tiempo aleatorio (para simular trabajo variable)
 static void active_random_wait(uint32_t *state) {
     uint32_t delay = (rng_step(state) % 60000) + 4000;
     for (volatile uint32_t i = 0; i < delay; i++) {
@@ -62,6 +67,7 @@ static void active_random_wait(uint32_t *state) {
     }
 }
 
+// Busca un contexto MVar por ID
 static mvar_context_t *ctx_lookup(int id) {
     for (int i = 0; i < MVAR_MAX_INSTANCES; i++) {
         if (contexts[i].in_use && contexts[i].id == id) {
@@ -71,6 +77,7 @@ static mvar_context_t *ctx_lookup(int id) {
     return NULL;
 }
 
+// Asigna un nuevo contexto MVar con semáforos empty y full
 static mvar_context_t *ctx_allocate(void) {
     for (int i = 0; i < MVAR_MAX_INSTANCES; i++) {
         if (!contexts[i].in_use) {
@@ -86,6 +93,8 @@ static mvar_context_t *ctx_allocate(void) {
     return NULL;
 }
 
+// Proceso writer: escribe una letra en el MVar repetidamente
+// Usa semáforos para sincronización (espera empty, señala full)
 static void writer_process(int argc, char **argv) {
     if (argc < 3) {
         sys_exit(-1);
@@ -117,14 +126,17 @@ static void writer_process(int argc, char **argv) {
 
     uint32_t rand_state = (uint32_t)sys_getpid() ^ ((uint32_t)writer_idx * 6971U);
 
+    // Loop infinito: escribir la letra asignada
     while (1) {
         active_random_wait(&rand_state);
-        sys_sem_wait(sem_empty);
-        ctx->value = letter;
-        sys_sem_post(sem_full);
+        sys_sem_wait(sem_empty);   // Esperar a que el MVar esté vacío
+        ctx->value = letter;        // Escribir la letra
+        sys_sem_post(sem_full);     // Señalar que hay un valor disponible
     }
 }
 
+// Proceso reader: lee del MVar e imprime en color
+// Usa semáforos para sincronización (espera full, señala empty)
 static void reader_process(int argc, char **argv) {
     if (argc < 3) {
         sys_exit(-1);
@@ -158,16 +170,19 @@ static void reader_process(int argc, char **argv) {
 
     uint32_t rand_state = (uint32_t)sys_getpid() ^ ((uint32_t)reader_idx * 9151U);
 
+    // Loop infinito: leer e imprimir el valor
     while (1) {
         active_random_wait(&rand_state);
-        sys_sem_wait(sem_full);
-        char value = ctx->value;
-        sys_sem_post(sem_empty);
-        printcColor(value, color);
+        sys_sem_wait(sem_full);     // Esperar a que haya un valor
+        char value = ctx->value;     // Leer el valor
+        sys_sem_post(sem_empty);     // Señalar que el MVar está vacío
+        printcColor(value, color);   // Imprimir en color
         sys_yield();
     }
 }
 
+// Inicia una demo de MVar con N writers y M readers
+// Retorna 0 si tiene éxito, -1 si hay error
 int mvar_start(int writer_count, int reader_count, mvar_launch_info_t *out_info) {
     if (writer_count <= 0 || reader_count <= 0 ||
         writer_count > MVAR_MAX_WRITERS || reader_count > MVAR_MAX_READERS ||
@@ -175,11 +190,13 @@ int mvar_start(int writer_count, int reader_count, mvar_launch_info_t *out_info)
         return -1;
     }
 
+    // Crear nuevo contexto MVar
     mvar_context_t *ctx = ctx_allocate();
     if (ctx == NULL) {
         return -1;
     }
 
+    // Crear semáforos: empty=1 (inicialmente vacío), full=0 (sin valor)
     int sem_empty = sys_sem_open(ctx->sem_empty_name, 1);
     int sem_full = sys_sem_open(ctx->sem_full_name, 0);
     if (sem_empty < 0 || sem_full < 0) {
@@ -205,6 +222,7 @@ int mvar_start(int writer_count, int reader_count, mvar_launch_info_t *out_info)
         }
     }
 
+    // Crear procesos writers (cada uno escribe una letra)
     for (int w = 0; w < writer_count; w++) {
         char **argv = malloc(sizeof(char *) * 4);
         if (argv == NULL) {
@@ -242,6 +260,7 @@ int mvar_start(int writer_count, int reader_count, mvar_launch_info_t *out_info)
         }
     }
 
+    // Crear procesos readers (cada uno con su color)
     for (int r = 0; r < reader_count; r++) {
         char **argv = malloc(sizeof(char *) * 4);
         if (argv == NULL) {

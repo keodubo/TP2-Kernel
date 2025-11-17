@@ -14,27 +14,28 @@ static ksem_t *sem_buckets[KSEM_HASH_BUCKETS] = {0};
 // (evita que dos procesos creen el mismo semáforo simultáneamente)
 static volatile int sem_creation_lock = 0;
 
-// Helpers de tabla hash y nombres
+// Funciones auxiliares para la tabla hash y manejo de nombres
 static uint32_t sem_hash(const char *name);
 static uint32_t sem_name_len(const char *name);
 static int sem_name_cmp(const char *a, const char *b);
 static void sem_name_copy(char *dst, const char *src);
 
-// Helpers de interrupciones locales
+// Funciones auxiliares para manejo de interrupciones
 static uint64_t irq_save(void);
 static void irq_restore(uint64_t flags);
 
-// Helpers de cola FIFO de waiters
+// Funciones auxiliares para la cola de procesos esperando
 static void wait_queue_init(wait_queue_t *q);
 static bool wait_queue_is_empty(const wait_queue_t *q);
 static void wait_queue_push(wait_queue_t *q, sem_waiter_t *node);
 static sem_waiter_t *wait_queue_pop(wait_queue_t *q);
 static sem_waiter_t *wait_queue_remove_proc(wait_queue_t *q, pcb_t *proc);
 
-// Helpers varios
+// Funciones auxiliares para limpieza de semáforos
 static bool sem_ready_to_destroy_locked(ksem_t *sem);
 static void sem_free(ksem_t *sem);
 
+// Calcula el hash del nombre del semáforo para ubicarlo en la tabla
 static uint32_t sem_hash(const char *name) {
     uint32_t hash = 5381;
     char c;
@@ -44,6 +45,7 @@ static uint32_t sem_hash(const char *name) {
     return hash % KSEM_HASH_BUCKETS;
 }
 
+// Calcula la longitud del nombre del semáforo
 static uint32_t sem_name_len(const char *name) {
     if (name == NULL) {
         return 0;
@@ -55,6 +57,7 @@ static uint32_t sem_name_len(const char *name) {
     return len;
 }
 
+// Compara dos nombres de semáforos
 static int sem_name_cmp(const char *a, const char *b) {
     while (*a != '\0' && *b != '\0') {
         if (*a != *b) {
@@ -66,6 +69,7 @@ static int sem_name_cmp(const char *a, const char *b) {
     return (int)(unsigned char)(*a) - (int)(unsigned char)(*b);
 }
 
+// Copia el nombre del semáforo de src a dst
 static void sem_name_copy(char *dst, const char *src) {
     uint32_t i = 0;
     for (; i < KSEM_NAME_MAX - 1 && src[i] != '\0'; i++) {
@@ -74,6 +78,7 @@ static void sem_name_copy(char *dst, const char *src) {
     dst[i] = '\0';
 }
 
+// Guarda el estado de las interrupciones y las deshabilita
 static uint64_t irq_save(void) {
     uint64_t flags;
     __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
@@ -81,12 +86,14 @@ static uint64_t irq_save(void) {
     return flags;
 }
 
+// Restaura el estado de las interrupciones guardado anteriormente
 static void irq_restore(uint64_t flags) {
     if (flags & (1ULL << 9)) {
         _sti();
     }
 }
 
+// Inicializa una cola de espera vacía
 static void wait_queue_init(wait_queue_t *q) {
     if (q != NULL) {
         q->head = NULL;
@@ -94,10 +101,12 @@ static void wait_queue_init(wait_queue_t *q) {
     }
 }
 
+// Verifica si la cola de espera está vacía
 static bool wait_queue_is_empty(const wait_queue_t *q) {
     return q == NULL || q->head == NULL;
 }
 
+// Agrega un proceso a la cola de espera
 static void wait_queue_push(wait_queue_t *q, sem_waiter_t *node) {
     if (q == NULL || node == NULL) {
         return;
@@ -112,6 +121,7 @@ static void wait_queue_push(wait_queue_t *q, sem_waiter_t *node) {
     }
 }
 
+// Remueve y retorna el primer proceso de la cola de espera
 static sem_waiter_t *wait_queue_pop(wait_queue_t *q) {
     if (q == NULL || q->head == NULL) {
         return NULL;
@@ -125,6 +135,7 @@ static sem_waiter_t *wait_queue_pop(wait_queue_t *q) {
     return node;
 }
 
+// Remueve todas las instancias de un proceso específico de la cola
 static sem_waiter_t *wait_queue_remove_proc(wait_queue_t *q, pcb_t *proc) {
     if (q == NULL || proc == NULL) {
         return NULL;
@@ -167,6 +178,7 @@ static sem_waiter_t *wait_queue_remove_proc(wait_queue_t *q, pcb_t *proc) {
     return removed_head;
 }
 
+// Verifica si el semáforo está listo para ser destruido
 static bool sem_ready_to_destroy_locked(ksem_t *sem) {
     if (sem == NULL) {
         return false;
@@ -181,6 +193,7 @@ static bool sem_ready_to_destroy_locked(ksem_t *sem) {
     return false;
 }
 
+// Libera la memoria del semáforo y sus colas de espera
 static void sem_free(ksem_t *sem) {
     if (sem == NULL) {
         return;
@@ -192,10 +205,7 @@ static void sem_free(ksem_t *sem) {
     mm_free(sem);
 }
 
-// -----------------------------------------------------------------------------
-// API pública
-// -----------------------------------------------------------------------------
-
+// Abre o crea un semáforo con el nombre y valor inicial especificados
 int ksem_open(const char *name, unsigned int init, ksem_t **out) {
     if (name == NULL || out == NULL) {
         return -1;
@@ -277,6 +287,7 @@ int ksem_open(const char *name, unsigned int init, ksem_t **out) {
     return 0;
 }
 
+// Decrementa el semáforo (bloquea el proceso si el contador es 0)
 int ksem_wait(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -318,6 +329,7 @@ int ksem_wait(ksem_t *sem) {
     return 0;
 }
 
+// Incrementa el semáforo (despierta un proceso esperando si hay alguno)
 int ksem_post(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -361,6 +373,7 @@ int ksem_post(ksem_t *sem) {
     return 0;
 }
 
+// Cierra un semáforo decrementando su contador de referencias
 int ksem_close(ksem_t *sem) {
     if (sem == NULL) {
         return -1;
@@ -386,6 +399,7 @@ int ksem_close(ksem_t *sem) {
     return 0;
 }
 
+// Desvincula un semáforo del sistema (se destruirá cuando ya no haya referencias)
 int ksem_unlink(const char *name) {
     if (name == NULL) {
         return -1;
@@ -436,6 +450,7 @@ int ksem_unlink(const char *name) {
     return 0;
 }
 
+// Remueve un proceso de todas las colas de espera de semáforos
 void ksem_remove_waiters_for(pcb_t *proc) {
     if (proc == NULL) {
         return;

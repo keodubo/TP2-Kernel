@@ -49,6 +49,7 @@ static void detach_children(pcb_t *parent);
 
 extern void _hlt(void);
 
+// Crea un nuevo proceso con la función de entrada, argumentos y prioridad especificados
 int proc_create(void (*entry)(int, char **), int argc, char **argv,
                 int prio, bool fg, const char *name) {
     if (entry == NULL || name == NULL) {
@@ -167,6 +168,7 @@ int proc_create(void (*entry)(int, char **), int argc, char **argv,
     return proc->pid;
 }
 
+// Termina el proceso actual con el código de salida especificado
 void proc_exit(int code) {
     collect_zombies();
 
@@ -219,6 +221,7 @@ void proc_exit(int code) {
     }
 }
 
+// Bloquea un proceso (deja de ejecutarse hasta que sea desbloqueado)
 int proc_block(int pid) {
     collect_zombies();
 
@@ -254,6 +257,7 @@ int proc_block(int pid) {
     return 0;
 }
 
+// Desbloquea un proceso (lo vuelve a poner en cola de READY)
 int proc_unblock(int pid) {
     collect_zombies();
 
@@ -273,6 +277,7 @@ int proc_unblock(int pid) {
     return -1;
 }
 
+// Cambia la prioridad de un proceso
 void proc_nice(int pid, int new_prio) {
     collect_zombies();
 
@@ -324,6 +329,7 @@ void proc_nice(int pid, int new_prio) {
     }
 }
 
+// Mata un proceso (lo termina forzadamente)
 int proc_kill(int pid) {
     collect_zombies();
 
@@ -395,6 +401,7 @@ int proc_kill(int pid) {
     return 0;
 }
 
+// Busca y retorna el PCB de un proceso dado su PID
 pcb_t *proc_by_pid(int pid) {
     if (pid <= 0) {
         return NULL;
@@ -409,6 +416,7 @@ pcb_t *proc_by_pid(int pid) {
     return NULL;
 }
 
+// Obtiene el PID del proceso que está en foreground
 int proc_get_foreground_pid(void) {
     // Primero consultar la TTY, que es la fuente de verdad
     int tty_fg = tty_get_foreground();
@@ -425,10 +433,7 @@ int proc_get_foreground_pid(void) {
     return -1;
 }
 
-/**
- * @brief Establece un proceso como foreground en la TTY
- * @param pid PID del proceso a poner en foreground (-1 para ninguno)
- */
+// Establece qué proceso está en foreground
 void proc_set_foreground(int pid) {
     // Marcar el nuevo foreground
     if (pid > 0) {
@@ -449,6 +454,7 @@ void proc_set_foreground(int pid) {
     }
 }
 
+// Busca un slot libre en la tabla de procesos
 static pcb_t *allocate_slot(void) {
     for (int i = 0; i < MAX_PROCS; i++) {
         if (!procs[i].used) {
@@ -460,6 +466,7 @@ static pcb_t *allocate_slot(void) {
     return NULL;
 }
 
+// Libera un slot de la tabla de procesos
 static void release_slot(pcb_t *proc) {
     if (proc == NULL) {
         return;
@@ -478,6 +485,7 @@ static void release_slot(pcb_t *proc) {
     proc->used = false;
 }
 
+// Configura el stack inicial del proceso con los registros necesarios
 static void setup_stack(pcb_t *proc) {
     uint64_t top = (uint64_t)proc->kstack_base + KSTACK_SIZE;
     top &= ~0xFULL;  // Align to 16 bytes
@@ -504,6 +512,7 @@ static void setup_stack(pcb_t *proc) {
     proc->kframe = frame;
 }
 
+// Inserta un proceso en la lista enlazada de procesos activos
 static void insert_proc(pcb_t *proc) {
     proc->next = NULL;
     proc->prev = proc_tail;
@@ -517,6 +526,7 @@ static void insert_proc(pcb_t *proc) {
     proc_tail = proc;
 }
 
+// Remueve un proceso de la lista enlazada de procesos activos
 static void remove_proc(pcb_t *proc) {
     if (proc == NULL) {
         return;
@@ -538,11 +548,13 @@ static void remove_proc(pcb_t *proc) {
     proc->prev = NULL;
 }
 
+// Agrega un proceso a la cola de zombies
 static void enqueue_zombie(pcb_t *proc) {
     proc->cleanup_next = zombie_head;
     zombie_head = proc;
 }
 
+// Recolecta y libera los procesos zombie que ya no son necesarios
 static void collect_zombies(void) {
     pcb_t *cursor = zombie_head;
     pcb_t *pending = NULL;
@@ -567,6 +579,7 @@ static void collect_zombies(void) {
     zombie_head = pending;
 }
 
+// Copia el nombre del proceso de src a dst
 static void copy_name(char *dst, const char *src, size_t max_len) {
     if (dst == NULL || max_len == 0) {
         return;
@@ -581,6 +594,7 @@ static void copy_name(char *dst, const char *src, size_t max_len) {
     dst[i] = '\0';
 }
 
+// Función de trampolín que ejecuta la función de entrada del proceso
 static void trampoline(pcb_t *proc) {
     ncPrint("[KERNEL trampoline] Entered!\n");
     if (proc != NULL) {
@@ -611,6 +625,7 @@ static void trampoline(pcb_t *proc) {
     }
 }
 
+// Notifica al proceso padre que su hijo ha terminado
 static void notify_parent_exit(pcb_t *proc) {
     if (proc == NULL) {
         return;
@@ -639,6 +654,7 @@ static void notify_parent_exit(pcb_t *proc) {
     }
 }
 
+// Espera a que un proceso hijo termine su ejecución
 /**
  * Espera a que un proceso hijo termine su ejecución.
  *
@@ -755,6 +771,7 @@ int proc_wait(int target_pid, int *status) {
     return -1;
 }
 
+// Obtiene información de todos los procesos activos
 int proc_snapshot(proc_info_t *out, int max_items) {
     if (out == NULL || max_items <= 0) {
         return 0;

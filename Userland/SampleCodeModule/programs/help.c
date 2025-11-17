@@ -2,6 +2,8 @@
 #include <sys_calls.h>
 #include <spawn_args.h>
 
+// Imprime toda la información de ayuda de los comandos disponibles
+// Incluye ejemplos de uso, pipes y ejecución en background
 static void print_help_text(void) {
 	printf("\n\n===== Listing a preview of available commands =====\n");
 	printf("\n>'help' or 'ls'     - displays this shell information");
@@ -40,6 +42,8 @@ static void print_help_text(void) {
 	printf("  cat | filter           - read input and filter vowels\n\n");
 }
 
+// Función principal del comando help
+// Muestra la lista de comandos disponibles y su uso
 void help_main(int argc, char **argv) {
 	(void)argc;
 	print_help_text();

@@ -9,11 +9,12 @@
 #include "memory_manager.h"
 
 
+// Archivos globales para entrada/salida estándar
 static file_t *stdin_file = NULL;
 static file_t *stdout_file = NULL;
 static file_t *stderr_file = NULL;
 
-// Helpers mínimos para ejecutar secciones críticas breves
+// Guarda el estado de las interrupciones y las deshabilita (para secciones críticas)
 static uint64_t irq_save_local(void) {
     uint64_t flags;
     __asm__ volatile("pushfq\n\tpop %0" : "=r"(flags));
@@ -21,13 +22,14 @@ static uint64_t irq_save_local(void) {
     return flags;
 }
 
+// Restaura el estado de las interrupciones que se guardó antes
 static void irq_restore_local(uint64_t flags) {
     if (flags & (1ULL << 9)) {
         _sti();
     }
 }
 
-// Adaptadores entre files y backend de TTY
+// Lee datos desde un TTY (terminal) hacia el buffer
 static int fd_tty_read(file_t *file, void *buf, int n) {
     if (file == NULL || !file->can_read || file->ptr == NULL || buf == NULL || n <= 0) {
         return -1;
@@ -45,6 +47,7 @@ static int fd_tty_read(file_t *file, void *buf, int n) {
     return tty_read((tty_t *)file->ptr, buf, n);
 }
 
+// Escribe datos desde el buffer hacia un TTY (terminal)
 static int fd_tty_write(file_t *file, const void *buf, int n) {
     if (file == NULL || !file->can_write || file->ptr == NULL || buf == NULL || n <= 0) {
         return -1;
@@ -52,6 +55,7 @@ static int fd_tty_write(file_t *file, const void *buf, int n) {
     return tty_write((tty_t *)file->ptr, buf, n);
 }
 
+// Cierra un TTY (terminal)
 static int fd_tty_close(file_t *file) {
     if (file == NULL || file->ptr == NULL) {
         return -1;
@@ -59,18 +63,21 @@ static int fd_tty_close(file_t *file) {
     return tty_close((tty_t *)file->ptr);
 }
 
+// Estructura con las operaciones para archivos TTY
 static const struct fd_ops TTY_OPS = {
     .read = fd_tty_read,
     .write = fd_tty_write,
     .close = fd_tty_close
 };
 
+// Inicializa el sistema de descriptores de archivos
 void fd_init(void) {
     stdin_file = NULL;
     stdout_file = NULL;
     stderr_file = NULL;
 }
 
+// Inicializa los archivos estándar (stdin, stdout, stderr) con el TTY por defecto
 void fd_init_std(void) {
     tty_t *tty = tty_default();
     if (tty == NULL) {
@@ -91,6 +98,7 @@ void fd_init_std(void) {
     }
 }
 
+// Crea un nuevo archivo con el tipo, puntero y operaciones especificadas
 file_t *file_create(fd_type_t type, void *ptr, bool rd, bool wr, const struct fd_ops *ops) {
     if (ptr == NULL || ops == NULL) {
         return NULL;
@@ -111,6 +119,7 @@ file_t *file_create(fd_type_t type, void *ptr, bool rd, bool wr, const struct fd
     return file;
 }
 
+// Incrementa el contador de referencias de un archivo
 void file_ref(file_t *file) {
     if (file == NULL) {
         return;
@@ -120,6 +129,7 @@ void file_ref(file_t *file) {
     irq_restore_local(flags);
 }
 
+// Decrementa el contador de referencias y libera el archivo si llega a cero
 void file_release(file_t *file) {
     if (file == NULL) {
         return;
@@ -141,6 +151,7 @@ void file_release(file_t *file) {
     mm_free(file);
 }
 
+// Crea una nueva tabla de descriptores de archivos vacía
 fd_table_t *fd_table_create(void) {
     fd_table_t *table = (fd_table_t *)mm_malloc(sizeof(fd_table_t));
     if (table == NULL) {
@@ -152,6 +163,7 @@ fd_table_t *fd_table_create(void) {
     return table;
 }
 
+// Destruye una tabla de descriptores, liberando todos los archivos abiertos
 void fd_table_destroy(fd_table_t *table) {
     if (table == NULL) {
         return;
@@ -165,6 +177,7 @@ void fd_table_destroy(fd_table_t *table) {
     mm_free(table);
 }
 
+// Clona una tabla de descriptores desde src hacia dst
 int fd_table_clone(fd_table_t *dst, fd_table_t *src) {
     if (dst == NULL) {
         return -1;
@@ -189,6 +202,7 @@ int fd_table_clone(fd_table_t *dst, fd_table_t *src) {
     return 0;
 }
 
+// Adjunta los archivos estándar (stdin, stdout, stderr) a una tabla de descriptores
 void fd_table_attach_std(fd_table_t *table) {
     if (table == NULL) {
         return;
@@ -208,6 +222,7 @@ void fd_table_attach_std(fd_table_t *table) {
     }
 }
 
+// Obtiene el archivo asociado a un descriptor de archivo específico
 file_t *fd_table_get(fd_table_t *table, int fd) {
     if (table == NULL || fd < 0 || fd >= FD_MAX) {
         return NULL;
@@ -215,16 +230,19 @@ file_t *fd_table_get(fd_table_t *table, int fd) {
     return table->entries[fd];
 }
 
+// Verifica si un descriptor de archivo permite lectura
 bool fd_table_can_read(fd_table_t *table, int fd) {
     file_t *file = fd_table_get(table, fd);
     return (file != NULL && file->can_read);
 }
 
+// Verifica si un descriptor de archivo permite escritura
 bool fd_table_can_write(fd_table_t *table, int fd) {
     file_t *file = fd_table_get(table, fd);
     return (file != NULL && file->can_write);
 }
 
+// Cierra un descriptor de archivo en la tabla
 int fd_table_close(fd_table_t *table, int fd) {
     if (table == NULL || fd < 0 || fd >= FD_MAX) {
         return -1;
@@ -238,6 +256,7 @@ int fd_table_close(fd_table_t *table, int fd) {
     return 0;
 }
 
+// Instala un archivo en un descriptor específico de la tabla
 int fd_table_install(fd_table_t *table, int fd, file_t *file) {
     if (table == NULL || file == NULL || fd < 0 || fd >= FD_MAX) {
         return -1;
@@ -249,6 +268,7 @@ int fd_table_install(fd_table_t *table, int fd, file_t *file) {
     return fd;
 }
 
+// Busca el primer descriptor disponible y le asigna el archivo
 int fd_table_allocate(fd_table_t *table, file_t *file) {
     if (table == NULL || file == NULL) {
         return -1;
@@ -262,6 +282,7 @@ int fd_table_allocate(fd_table_t *table, file_t *file) {
     return -1;
 }
 
+// Duplica un descriptor de archivo (oldfd) en otro descriptor (newfd)
 int fd_table_dup2(fd_table_t *table, int oldfd, int newfd) {
     if (table == NULL || oldfd < 0 || oldfd >= FD_MAX || newfd < 0 || newfd >= FD_MAX) {
         return -1;

@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-
+// Llena un bloque de memoria con un valor específico
 void * memset(void * destination, int32_t c, uint64_t length)
 {
 	uint8_t chr = (uint8_t)c;
@@ -12,6 +12,7 @@ void * memset(void * destination, int32_t c, uint64_t length)
 	return destination;
 }
 
+// Copia un bloque de memoria desde source hacia destination
 void * memcpy(void * destination, const void * source, uint64_t length)
 {
 	
@@ -39,6 +40,7 @@ void * memcpy(void * destination, const void * source, uint64_t length)
 	return destination;
 }
 
+// Compara dos cadenas de texto y retorna 0 si son iguales
 int strcmp(const char *s1, const char *s2)
 {
 	while (*s1 && (*s1 == *s2)) {

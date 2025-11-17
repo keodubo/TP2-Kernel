@@ -23,6 +23,7 @@ static pcb_t *pick_next(void);
 static void apply_aging(void);
 static void idle_loop(int argc, char **argv);
 
+// Inicializa el scheduler (colas de prioridad y proceso idle)
 void sched_init(void) {
     for (int i = 0; i < MAX_PRIOS; i++) {
         ready_head[i] = NULL;
@@ -48,22 +49,27 @@ void sched_init(void) {
     }
 }
 
+// Activa el scheduler para que comience a ejecutarse
 void sched_start(void) {
     scheduler_enabled = true;
 }
 
+// Verifica si el scheduler está activo
 bool sched_is_enabled(void) {
     return scheduler_enabled;
 }
 
+// Retorna el proceso que está ejecutándose actualmente
 pcb_t *sched_current(void) {
     return current;
 }
 
+// Retorna el proceso idle del sistema
 pcb_t *sched_get_idle(void) {
     return idle_proc;
 }
 
+// Agrega un proceso a la cola de READY según su prioridad
 void sched_enqueue(pcb_t *proc) {
     if (proc == NULL) {
         return;
@@ -90,6 +96,7 @@ void sched_enqueue(pcb_t *proc) {
     q_push(proc);
 }
 
+// Remueve un proceso de las colas del scheduler
 void sched_remove(pcb_t *proc) {
     if (proc == NULL) {
         return;
@@ -104,10 +111,12 @@ void sched_remove(pcb_t *proc) {
     }
 }
 
+// Selecciona el próximo proceso a ejecutar
 pcb_t *sched_pick_next(void) {
     return pick_next();
 }
 
+// Fuerza un cambio de contexto inmediato
 void sched_force_yield(void) {
     if (current != NULL) {
         current->ticks_left = 0;
@@ -115,6 +124,7 @@ void sched_force_yield(void) {
     _force_schedule();
 }
 
+// Función principal del scheduler que ejecuta en cada tick del reloj
 uint64_t schedule(uint64_t cur_rsp) {
     if (!scheduler_enabled || current == NULL) {
         return 0;
@@ -179,6 +189,7 @@ uint64_t schedule(uint64_t cur_rsp) {
     return (uint64_t)current->kframe;
 }
 
+// Agrega un proceso a su cola de prioridad correspondiente
 static void q_push(pcb_t *proc) {
     int prio = proc->priority;
     if (prio < MIN_PRIO) {
@@ -198,6 +209,7 @@ static void q_push(pcb_t *proc) {
     }
 }
 
+// Remueve y retorna el primer proceso de una cola de prioridad
 static pcb_t *q_pop(int prio) {
     pcb_t *head = ready_head[prio];
     if (head == NULL) {
@@ -213,6 +225,7 @@ static pcb_t *q_pop(int prio) {
     return head;
 }
 
+// Remueve un proceso específico de su cola de prioridad
 static void q_remove(pcb_t *proc) {
     int prio = proc->priority;
     if (prio < MIN_PRIO || prio > HIGHEST_PRIO) {
@@ -240,6 +253,7 @@ static void q_remove(pcb_t *proc) {
     }
 }
 
+// Selecciona el proceso de mayor prioridad que esté listo
 static pcb_t *pick_next(void) {
     for (int prio = HIGHEST_PRIO; prio >= MIN_PRIO; prio--) {
         if (ready_head[prio] != NULL) {
@@ -253,6 +267,7 @@ static pcb_t *pick_next(void) {
     return NULL;
 }
 
+// Aplica aging: aumenta la prioridad de procesos que han esperado mucho tiempo
 static void apply_aging(void) {
     // Collect promoted processes to avoid modifying queues during iteration
     pcb_t *promoted_head = NULL;
@@ -311,6 +326,7 @@ static void apply_aging(void) {
     }
 }
 
+// Función del proceso idle (se ejecuta cuando no hay otros procesos)
 static void idle_loop(int argc, char **argv) {
     (void)argc;
     (void)argv;

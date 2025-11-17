@@ -5,6 +5,8 @@
 #include <mm_stats.h>
 #include <spawn_args.h>
 
+// Imprime un ratio como porcentaje con 2 decimales
+// Usado para mostrar fragmentación de memoria
 static void print_fixed_ratio(uint64_t numerator, uint64_t denominator) {
     if (denominator == 0) {
         printf("N/A");
@@ -29,6 +31,8 @@ static void print_fixed_ratio(uint64_t numerator, uint64_t denominator) {
     printf("%d", (int)fractional);
 }
 
+// Imprime estadísticas básicas del memory manager
+// Muestra heap total, usado, libre, bloques libres, bloque más grande y fragmentación
 static void print_basic_stats(const mm_stats_t *stats) {
     printf("allocator: %s\n", stats->mm_name[0] ? stats->mm_name : "unknown");
 
@@ -73,6 +77,8 @@ static void print_basic_stats(const mm_stats_t *stats) {
     }
 }
 
+// Imprime la lista libre (freelist) para allocators tipo First Fit
+// Muestra dirección y tamaño de cada bloque libre
 static void print_verbose_simple(const mm_stats_t *stats) {
     printf("\nfreelist (up to %d):\n", MM_MAX_SIMPLE_BLOCKS);
     for (uint32_t i = 0; i < stats->freelist_count && i < MM_MAX_SIMPLE_BLOCKS; i++) {
@@ -93,6 +99,8 @@ static void print_verbose_simple(const mm_stats_t *stats) {
     }
 }
 
+// Imprime estadísticas por orden para Buddy System
+// Muestra orden, tamaño de bloque y cantidad de bloques libres
 static void print_verbose_buddy(const mm_stats_t *stats) {
     printf("\norder  size       free\n");
     uint8_t limit = stats->max_order;
@@ -111,6 +119,8 @@ static void print_verbose_buddy(const mm_stats_t *stats) {
     }
 }
 
+// Comando mem: Muestra estadísticas de uso de memoria del sistema
+// Uso: mem [-v]  (el flag -v muestra detalles adicionales)
 int mem_command(int argc, char **argv) {
     int verbose = 0;
 
@@ -126,6 +136,7 @@ int mem_command(int argc, char **argv) {
         }
     }
 
+    // Obtener estadísticas del memory manager del kernel
     mm_stats_t stats;
     int64_t rc = sys_mm_get_stats(&stats);
     if (rc < 0) {
@@ -133,8 +144,10 @@ int mem_command(int argc, char **argv) {
         return 1;
     }
 
+    // Mostrar estadísticas básicas siempre
     print_basic_stats(&stats);
 
+    // Si se pidió modo verbose, mostrar detalles según tipo de allocator
     if (verbose) {
         if (stats.has_buddy) {
             print_verbose_buddy(&stats);
